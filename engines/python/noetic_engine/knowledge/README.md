@@ -1,226 +1,160 @@
-# Noetic Memory (`noetic.knowledge`)
+Here is the updated `README.md` for the `noetic.knowledge` module, rewritten to reflect the **AgentProg**, **Tri-Store**, and **Shared Semantic Environment** architecture.
 
-TODO: Update this design to implement a Shared Semantic Environment.
+---
+
+# Noetic Knowledge Engine (`noetic.knowledge`)
 
 ## Overview
 
-The `noetic.knowledge` module is the **Single Source of Truth** (The Blackboard) for the Noetic Engine.
+The `noetic.knowledge` module is the **Cognitive Operating System** of the Noetic Engine.
 
-In the Noetic architecture, the Engine (Core) is transient and stateless, while the Memory is persistent and stateful. If the Engine crashes or restarts, it should be able to resume execution exactly where it left off by hydrating from `noetic.knowledge`.
+Unlike traditional architectures that treat memory as a passive database (RAG), Noetic treats memory as an active **Virtual Machine**. It manages the Agent's attention span using a strict **Stack & Heap** architecture ("AgentProg") and enables multi-agent collaboration via a **Shared Semantic Environment** (SSE).
 
-This module implements a **Temporal Knowledge Graph** inspired by [Zep](https://getzep.com/). It combines the structured precision of a graph database (NetworkX) with the semantic flexibility of a vector store, all underpinned by a rigorous timeline. This temporal knowledge graph enables properly intelligent agentic systems to utilize a "living document" of facts, or a "world model", and are also auditable (with time travel capabilities).
+This module has two primary responsibilities:
 
-Crucial: The Agents must use a Skill (MCP) for I/O with Knowledge.
+1. **State Management (AgentProg):** preventing "Token Bloat" by scoping context to the active task (Stack) vs. long-term storage (Heap).
+2. **Swarm Synchronization (SSE):** ensuring multiple agents perceive a shared reality via a federated Knowledge Graph.
 
 ---
 
-## 1. The "Blackboard" Philosophy
+## 1. Architecture: The Tri-Layer Brain
 
-The **Blackboard Pattern** dictates that modules do not talk to each other directly; they talk to the Blackboard.
+The module is divided into three functional layers, mimicking the hierarchy of biological cognition.
 
-- **Reflex System:** Writes raw `Events` to the Blackboard (e.g., "User clicked button").
-- **Cognitive System:** Reads the `WorldState` from the Blackboard to make plans.
-- **Surface (UI):** Observes the Blackboard to render the current state.
+### Layer 1: Working Memory (The Stack)
 
-### The `WorldState` Snapshot
+**Module:** `noetic.knowledge.working`
 
-This Knowledge module provides a "Hot" in-memory object representing the exact state of the simulation at the current tick.
+This layer implements the **AgentProg** architecture. It treats the Context Window like a CPU Call Stack to enforce strict scoping.
+
+* **Memory Frames:** Context is segmented into nested frames.
+* **Local Scope:** Logs, scratchpad thoughts, and intermediate tool outputs exist *only* within the active frame.
+* **Garbage Collection:** When a sub-task finishes (Frame Pop), all local "noise" is destroyed. Only the explicit **Return Value** is promoted to the Heap.
+
+### Layer 2: The Tri-Store (The Heap)
+
+**Module:** `noetic.knowledge.store`
+
+The Heap is the "Hard Drive"—infinite, structured, and persistent. It is a **Tri-Store** composed of three specialized memory types:
+
+| Store Type | Structure | Backend | Purpose |
+| --- | --- | --- | --- |
+| **Semantic** | Temporal Graph | Zep / Graphiti | Stores **Facts** & **Relations** (The "What"). Retrieved via **Community Summaries**. |
+| **Episodic** | Hierarchical Logs | SQL / Vector | Stores **Narrative History** (The "When"). Optimized via **AgentFold**. |
+| **Procedural** | Skill Library | Vector DB | Stores **Goal Embeddings** & **Scripts** (The "How"). Solves compounding errors via **Memp**. |
+
+### Layer 3: The Nexus (The Assembler)
+
+**Module:** `noetic.knowledge.nexus`
+
+The Nexus is the CPU. It dynamically assembles the final Prompt Context based on a **Relevance Formula** () and a strict Token Budget.
+
+* **S (Semantic):** Vector similarity.
+* **T (Temporal):** Time decay ().
+* **G (Graph):** Distance in the Knowledge Graph.
+* **I (Salience):** Intrinsic importance score (Safety > Chit-chat).
+
+---
+
+## 2. Shared Semantic Environment (SSE)
+
+To enable Multi-Agent Systems, the Knowledge Engine implements a **Federated Heap**. Agents do not "own" their database; they "mount" a view of the shared reality.
+
+### A. The Ontology (`ontology.py`)
+
+A strict schema definition that all agents must respect. This prevents semantic drift (e.g., Agent A using "Client" vs. Agent B using "Customer"). The Store rejects writes that violate the Ontology.
+
+### B. Graph Scopes (The Mount Protocol)
+
+Agents connect to the Store via a `GraphScope`.
+
+* **GlobalScope:** Full Read/Write access (Root Agent).
+* **RestrictedScope:** A "Sandbox" view restricted to specific nodes.
 
 ```python
-class WorldState(BaseModel):
-    tick: int                      # Current frame count
-    entities: Dict[UUID, Entity]   # Active objects (Plants, User, etc.)
-    facts: List[Fact]              # Current true relations
-    event_queue: List[Event]       # Unprocessed inputs
-    active_goals: List[Goal]       # What the agents are trying to do
+# Parent spawns child with restricted vision
+scope = parent.knowledge.create_scope(
+    mounts=[
+        {"id": "project:123", "access": "RW"},  # Read-Write
+        {"id": "global_config", "access": "R"}   # Read-Only
+    ]
+)
 
 ```
 
----
+### C. The "Blackboard" Sync (Pub/Sub)
 
-## 2. The Zep-Inspired Temporal Graph
+We implement **Real-Time State Synchronization**.
 
-Standard Knowledge Graphs are static: `(User) -[LOCATED_AT]-> (Home)`.
-A **Temporal Knowledge Graph** (like Zep) adds the dimension of time: `(User) -[LOCATED_AT]-> (Home) [Valid: 09:00 - 17:00]`.
-
-This allows the Agent to understand **Context Change** and **Episodic Memory**.
-
-### A. The Graph Structure (`(Subject, Predicate, Object)`)
-
-We use a directed graph where:
-
-- **Nodes** are `Entities` (The Noun).
-- **Edges** are `Facts` (The Relation).
-
-### B. The Temporal Dimension
-
-Every Fact (Edge) has a lifecycle.
-
-- `created_at`: When the system learned this.
-- `valid_from`: When this fact became true in the "simulation".
-- `valid_until`: When this fact ceased to be true (making it "History").
-
-**Why this matters:**
-If the user asks "Where was I yesterday?", the system queries the graph with a time filter `t = now - 24h`. A standard graph would only know where the user is _now_.
-
-### C. The Semantic Layer (Vectors)
-
-Every Node and Edge is embedded into a Vector Store.
-
-- **Fact:** "The plant is wilting." `[0.12, -0.98, ...]`
-- **Query:** "Is the garden healthy?"
-- **Search:** The vector search finds "The plant is wilting" because "wilting" is semantically opposite to "healthy," even if the keywords don't match.
+1. **Write:** Agent A updates `project:123.status = "DONE"`.
+2. **Emit:** The Store emits event `GRAPH_UPDATE:project:123`.
+3. **React:** Agent B (subscribed to `project:123`) receives the signal via the Nexus and triggers an immediate **Cognitive Interrupt**.
 
 ---
 
-## 3. Architecture: The "Hybrid Store"
+## 3. The "Sleep" Cycle (Offline Maintenance)
 
-To achieve the Zep-inspired Temporal Graph functionality, we use a hybrid backend strategy:
+To prevent the Tri-Store from becoming a swamp, the engine runs a maintenance cycle during idle periods.
 
-| Component            | Technology                           | Responsibility                                                                                                |
-| -------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| **Relational Store** | **SQLAlchemy** (SQLite / PostgreSQL) | Stores the Graph Topology (Nodes/Edges), Transactions, and Time Ranges. Ensures strict consistency.           |
-| **Vector Store**     | **ChromaDB** (Persistent Mode)       | Stores the Semantic Embeddings of Entities and Facts. Enables "fuzzy" retrieval.                              |
-| **Graph Cache**      | **NetworkX** (In-Memory)             | A lightweight graph loaded on startup for fast "Shortest Path" and "Neighborhood" algorithms during planning. |
-
-### The Data Flow
-
-1. **Write:** `ingest()` writes to SQL (Relation) AND ChromaDB (Vector) in a single atomic-like operation.
-2. **Read (State):** `get_world_state()` queries SQL to hydrate the current snapshot.
-3. **Read (Search):** `search()` queries ChromaDB for candidates, then hydrates details from SQL.
+1. **Distillation (Procedural):** Analyzes successful Stack Frames to generate reusable **Skills** (Memp).
+2. **Folding (Episodic):** Compresses raw logs into high-level narrative summaries (AgentFold).
+3. **Pruning (Semantic):** Merges duplicate nodes and archives low-salience facts using **Leiden Community Detection**.
 
 ---
 
-## 4. Data Model (`schema.py`)
-
-We map our Pydantic models to SQL tables using SQLAlchemy ORM.
-
-### A. Tables (Relational)
-
-**1. `entities**`
-
-- `id` (UUID, PK)
-- `type` (String) - e.g., "Plant", "User"
-- `attributes` (JSONB) - e.g., `{"species": "Fern"}`
-- `created_at` (DateTime)
-- `updated_at` (DateTime)
-
-**2. `facts` (The Edges)**
-
-- `id` (UUID, PK)
-- `subject_id` (UUID, FK -> entities.id)
-- `predicate` (String) - e.g., "needs_water"
-- `object_entity_id` (UUID, FK -> entities.id, Nullable)
-- `object_literal` (Text, Nullable)
-- `confidence` (Float)
-- **Temporal Columns:**
-- `valid_from` (DateTime)
-- `valid_until` (DateTime, Nullable) - NULL means "Currently True"
-
-**3. `tags` & `entity_tags**`
-
-- Standard Many-to-Many relationship table to link Entities to System Tags (UUIDs).
-
-### B. Vectors (Semantic)
-
-**Collection: `facts**`
-
-- **Embedding:** `sentence-transformers/all-MiniLM-L6-v2`
-- **Document:** Natural language representation (e.g., "The User watered the Fern").
-- **Metadata:** `{"subject_id": "...", "predicate": "...", "valid_until": "None"}`
-
----
-
-## 5. Core Logic Requirements
-
-### 1. Ingestion & Temporal Resolution
-
-When `ingest_fact(subject, predicate, object)` is called:
-
-1. **Query SQL:** Is there an _existing, active_ fact with this (Subject, Predicate, Object)?
-
-- **If Yes:** Update `valid_from` or `confidence` if needed. Do not create duplicates.
-- **If No:**
-- Check for **Contradictions** (e.g., existing fact is `status=dry`, new fact is `status=wet`).
-- If contradiction found: Update the _old_ fact's `valid_until` to `NOW()`. (This preserves history).
-- Insert the _new_ fact with `valid_from = NOW()` and `valid_until = NULL`.
-
-1. **Update Vector:** Generate embedding for the new fact and upsert to ChromaDB.
-
-### 2. Time Travel Querying
-
-The `get_world_state(snapshot_time: datetime = NOW)` method must respect the timeline.
-
-- **SQL Query:**
-
-```sql
-SELECT * FROM facts
-WHERE valid_from <= :snapshot_time
-AND (valid_until IS NULL OR valid_until > :snapshot_time)
-
-```
-
-- This allows the Engine to "rewind" the world state to debug past decisions.
-
-### 3. Atomic Transactions
-
-Implement a Context Manager for writes to ensure SQL and Vector stores stay in sync.
-
-```python
-with knowledge_store.transaction() as tx:
-    tx.add_fact(...)
-    tx.update_entity(...)
-# Commit happens here. If SQL fails, Vector write is skipped.
-
-```
-
----
-
-## 6. Implementation Directives (For AI Assistant)
+## 4. Implementation Directives (For AI Assistant)
 
 ### Dependencies
 
-Use the following production-grade libraries:
+* `getzep` / `graphiti`: For the Temporal Knowledge Graph backend.
+* `chromadb` / `qdrant`: For the Vector Store (Procedural/Episodic).
+* `networkx`: For in-memory graph traversal and pathfinding.
+* `pydantic`: For Ontology enforcement.
 
-- `sqlalchemy`: For ORM and SQL management.
-- `alembic`: For database migrations (essential for schema evolution).
-- `chromadb`: For vector storage.
-- `pydantic`: For data validation.
+### Data Model (`schema.py`)
 
-### Initialization (`__init__.py`)
+Implement the **MemoryFrame** for the Stack:
 
-- The module must check for the existence of `noetic.db` (SQLite) and `noetic_chroma/` (Vector Data).
-- If missing, it should auto-initialize the schema using Alembic.
-- It must pre-seed **System Tags** (defined in the Protocol) to ensure UUID consistency.
+```python
+class MemoryFrame(BaseModel):
+    id: UUID
+    goal: str
+    local_vars: List[str]  # The "Noise" to be garbage collected
+    return_value: Any      # The "Signal" to be promoted
 
-### Performance
+```
 
-- **Indexing:** Ensure SQL indices on `subject_id`, `predicate`, and `valid_until` for fast lookups.
-- **Lazy Loading:** Do not load the entire history into NetworkX. Only load _active_ facts (`valid_until IS NULL`) into the in-memory graph for planning.
+### Logic Requirements
 
-### Search Implementation
-
-Implement `hybrid_search(query)`:
-
-1. **Chroma:** `results = collection.query(query_texts=[query])`
-2. **Hydration:** Extract `fact_ids` from Chroma results.
-3. **SQL:** `SELECT * FROM facts WHERE id IN (fact_ids) AND valid_until IS NULL`.
-4. **Return:** List of Pydantic `Fact` objects.
+* **Ingestion:** Incoming observations must pass through a **Salience Classifier** (0.0 - 1.0). Only High Salience (>0.5) facts persist to the Heap.
+* **Retrieval:** The Nexus must implement the **Relevance Formula**. Do not use simple Cosine Similarity.
+* **Garbage Collection:** Ensure that `pop_frame()` creates a "Folded Summary" of the frame before deleting the raw logs.
 
 ---
 
-## 7. Directory Structure
+## 5. Directory Structure
 
 ```text
-../knowledge
-├── __init__.py         # Exports KnowledgeStore
-├── interfaces.py       # Abstract Base Class
-├── schema.py           # Pydantic Models (API Layer)
-├── models.py           # SQLAlchemy Models (DB Layer)
-├── store.py            # Main Logic (The Controller)
-├── graph.py            # NetworkX wrapper for pathfinding
-├── vector.py           # ChromaDB wrapper
-└── utils/
-    └── time.py         # Temporal helpers
+noetic/knowledge
+├── __init__.py           # Exports KnowledgeEngine
+├── ontology.py           # The Shared Schema Definitions
+├── schema.py             # Pydantic Models (MemoryFrame, Fact, Skill)
+│
+├── working/              # LAYER 1: The Stack
+│   ├── stack.py          # MemoryFrame management
+│   └── garbage.py        # GC logic
+│
+├── store/                # LAYER 2: The Heap (Tri-Store)
+│   ├── graph.py          # Semantic Store (Zep/Graphiti wrapper)
+│   ├── episodic.py       # Event Logs (AgentFold logic)
+│   └── procedure.py      # Skill Library (Memp logic)
+│
+├── nexus/                # LAYER 3: The CPU
+│   ├── assembler.py      # Context construction & Relevance weighting
+│   └── budget.py         # Token counting & truncation
+│
+└── sync/                 # SHARED ENVIRONMENT
+    ├── scope.py          # GraphScope & Mounting logic
+    └── bus.py            # Pub/Sub Event Bus
 
 ```
