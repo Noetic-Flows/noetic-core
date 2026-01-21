@@ -1,14 +1,18 @@
 import sys
 import os
-import pytest
+import subprocess
 
 # Add the engine source to the path
 engine_path = os.path.abspath("engines/python")
 sys.path.insert(0, engine_path)
 
-print(f"Running tests with path: {sys.path[0]}")
+print(f"Running tests with engine path: {engine_path}")
 
-# Run pytest programmatically
-# We look for tests in engines/python/tests
-exit_code = pytest.main(["engines/python/tests", "-v"])
+# Run pytest using the virtual environment's python
+venv_python = os.path.abspath(".venv311/bin/python")
+if not os.path.exists(venv_python):
+    venv_python = "python3" # Fallback
+
+cmd = [venv_python, "-m", "pytest", "engines/python/tests", "-v"]
+exit_code = subprocess.call(cmd)
 sys.exit(exit_code)
