@@ -13,6 +13,7 @@ The project consists of two main pillars:
 
 - **`noetic.knowledge` (Memory):** A Temporal Knowledge Graph combining SQL (structure/time) and ChromaDB (semantics).
 - **`noetic.orchestration` (Brain):** The decision layer fusing deterministic Flows (LangGraph) and probabilistic Planning (GOAP/A\*).
+- **`noetic.conscience` (Value System):** The Axiological Engine that evaluates actions against Principles to calculate moral cost and veto unsafe operations.
 - **`noetic.runtime` (Body):** The execution kernel managing the 60Hz Reflex Loop and the async Cognitive Loop.
 - **`noetic.canvas` (Face):** A Server-Driven UI system using the A2UI standard and JSON Pointer data binding.
 
@@ -65,13 +66,22 @@ Development should focus on filling the implementation gaps defined in the modul
     - Replace the `planner.py` stub.
     - Implement **Skill Discovery** (match skills to state changes).
     - Implement **A\* Pathfinding** to generate a sequence of skills from Current State to Goal State.
-2. **Principle Engine:**
-    - Implement `principles.py` using `json-logic`.
-    - Ensure it calculates "Moral Cost" for edges during planning.
-3. **Flow Engine:**
+2. **Flow Engine:**
     - Implement `flows.py` wrapping `LangGraph` for deterministic state machines.
 
-### C. Runtime Module (`noetic.runtime`)
+### C. Conscience Module (`noetic.conscience`)
+
+1. **Evaluator Engine:**
+    - Implement `evaluator.py` to load principles and execute JsonLogic.
+    - Implement `JudgementContext` schema.
+2. **Logic Integration:**
+    - Implement `logic.py` using `json-logic-qubit` (or equivalent) with safe execution (Fail Closed).
+    - Implement `functools.lru_cache` for performance.
+3. **Safety & Audit:**
+    - Implement `veto.py` to handle `INFINITY` costs.
+    - Implement `audit.py` for telemetry.
+
+### D. Runtime Module (`noetic.runtime`)
 
 1. **Reflex Loop (System 1):**
     - Implement `reflex.py` and the main `run_loop` in `engine.py`.

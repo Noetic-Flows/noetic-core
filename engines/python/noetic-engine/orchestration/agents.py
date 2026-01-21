@@ -1,9 +1,10 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
 class Principle(BaseModel):
     id: str
-    description: str
+    affects: str # e.g. "val.privacy"
+    description: Optional[str] = None
     logic: Dict[str, Any] # JsonLogic
 
 class AgentContext(BaseModel):
