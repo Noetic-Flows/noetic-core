@@ -29,15 +29,20 @@ class Evaluator:
         self.audit = AuditLogger()
         # VetoSwitch is static
 
-    def judge(self, context: JudgementContext, principles: List[Principle]) -> JudgementResult:
+    def judge(self, context: JudgementContext, principles: List[Principle], store: Optional[Any] = None) -> JudgementResult:
         """
         Evaluates the action against the provided principles.
         """
         total_cost = 0.0
         contributing = []
         
-        # Prepare data for JsonLogic
-        # We ensure 'action' contains both 'id' and 'args' for convenience in rules
+        # 1. Tag Expansion (Inheritance)
+        tags = context.tags
+        if store and hasattr(store, "get_all_parent_tags"):
+            tags = store.get_all_parent_tags(tags)
+            context.tags = tags # Update context with expanded tags
+            
+        # 2. Prepare data for JsonLogic
         data = context.model_dump()
         data["action"] = {
             "id": context.action_id,
@@ -61,7 +66,7 @@ class Evaluator:
             try:
                 VetoSwitch.check(cost, principle.id, data)
             except PolicyViolationError as e:
-                self.audit.log_violation(principle.id, e.reason)
+                self.audit.log_violation(principle.id, e.reason, action_id=context.action_id)
                 raise e
             
             if cost > 0:

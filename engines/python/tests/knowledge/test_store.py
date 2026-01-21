@@ -43,15 +43,27 @@ def test_hybrid_search(store):
     assert results[0].object_literal == "pepperoni pizza"
 
 def test_graph_cache_integration(store):
+
     user_id = uuid4()
+
     store.ingest_fact(user_id, "location", object_literal="room_101")
+
     
-    assert store.graph.has_edge(user_id, "literal:room_101")
+
+    assert store.graph.has_edge(str(user_id), "literal:room_101")
+
     
+
     # Update fact (contradiction)
+
     store.ingest_fact(user_id, "location", object_literal="room_102")
+
     
+
     # Old edge should be gone (or at least marked invalid in DB, but graph check relies on logic)
+
     # Our implementation removes the old edge from graph
-    assert not store.graph.has_edge(user_id, "literal:room_101")
-    assert store.graph.has_edge(user_id, "literal:room_102")
+
+    assert not store.graph.has_edge(str(user_id), "literal:room_101")
+
+    assert store.graph.has_edge(str(user_id), "literal:room_102")

@@ -51,6 +51,14 @@ class NoeticEngine:
     async def stop(self):
         self.running = False
         print("Noetic Engine Stopping...")
+        # Cancel all pending cognitive tasks
+        for task in self.cognitive.active_tasks:
+            if not task.done():
+                task.cancel()
+        
+        if self.cognitive.active_tasks:
+            await asyncio.gather(*self.cognitive.active_tasks, return_exceptions=True)
+            self.cognitive.active_tasks.clear()
 
     async def run_loop(self):
         """
@@ -59,16 +67,32 @@ class NoeticEngine:
         while self.running:
             start_time = time.monotonic()
 
-            # --- 1. REFLEX PHASE (Fast) ---
-            world_state = self.knowledge.get_world_state()
-            events = self.skills.poll_inputs()
-            
-            # Update UI
-            self.latest_ui = self.reflex.tick(events, world_state)
+            try:
+                # --- 1. REFLEX PHASE (Fast) ---
+                world_state = self.knowledge.get_world_state()
+                events = self.skills.poll_inputs()
+                
+                # Update UI
+                self.latest_ui = self.reflex.tick(events, world_state)
 
-            # --- 2. COGNITIVE PHASE (Async Check) ---
-            if world_state.event_queue:
-                asyncio.create_task(self.cognitive.process_next(world_state))
+                # --- 2. COGNITIVE PHASE (Async Check) ---
+                if world_state.event_queue:
+                    # We wrap the call to process_next to handle task tracking
+                    task = asyncio.create_task(self.cognitive.process_next(world_state))
+                    self.cognitive.active_tasks.add(task)
+                    # Clean up done tasks
+                    task.add_done_callback(self.cognitive.active_tasks.discard)
+
+            except Exception as e:
+                # Reflex Loop Failure is CRITICAL
+                print(f"CRITICAL: Reflex Loop Failure: {e}")
+                # In a production app, we might try to recover or just exit
+                # For now, let's log and keep trying if possible, or stop.
+                # The README says "Log immediately and exit."
+                self.running = False
+                raise e
 
             # --- 3. SLEEP ---
             await self.scheduler.sleep_until_next_tick(start_time)
+
+    

@@ -7,3 +7,4 @@ class AgentContext(BaseModel):
     system_prompt: str
     allowed_skills: List[str]
     principles: List[Principle]
+    persona: Optional[Dict[str, Any]] = None

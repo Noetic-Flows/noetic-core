@@ -2,10 +2,17 @@ import json
 import logging
 from noetic_engine.runtime import NoeticEngine
 from noetic_engine.orchestration import AgentContext
+from noetic_engine.conscience import Principle
 from noetic_engine.canvas import Component
 from noetic_engine.skills.library.system.control import PlaceholderSkill
 
 logger = logging.getLogger(__name__)
+
+class CodexIntegrityError(Exception):
+    """
+    Raised when a Codex file contains invalid references or malformed definitions.
+    """
+    pass
 
 class NoeticLoader:
     def load(self, engine: NoeticEngine, codex_path: str):
@@ -37,11 +44,21 @@ class NoeticLoader:
             except Exception as e:
                 logger.error(f"Failed to parse skill: {e}")
 
+        # 1.5 Load Principles (Store them for agent lookup)
+        orchestration = data.get("orchestration", {})
+        principles_data = orchestration.get("principles", [])
+        principles_map = {}
+        for p_def in principles_data:
+            try:
+                p = Principle(**p_def)
+                principles_map[p.id] = p
+            except Exception as e:
+                logger.error(f"Failed to parse principle {p_def.get('id')}: {e}")
+
         # 2. Load Agents
         # Support legacy root agents or new orchestration.agents
         agents = data.get("agents", [])
         if not agents:
-            orchestration = data.get("orchestration", {})
             agents = orchestration.get("agents", [])
 
         for agent_data in agents:
@@ -50,25 +67,48 @@ class NoeticLoader:
                 if "persona" in agent_data and "system_prompt" not in agent_data:
                     agent_data["system_prompt"] = agent_data["persona"].get("backstory", "")
                 
-                # Adapter for skills (list of strings vs objects?)
-                # Spec says "skills": ["skill.weather.get"] which is list of strings.
-                # AgentContext expects allowed_skills: List[str]. So this matches.
+                # Integrity Check: Skills
+                allowed_skills = agent_data.get("allowed_skills", [])
+                for skill_id in allowed_skills:
+                    if not engine.skills.get_skill(skill_id):
+                        raise CodexIntegrityError(f"Agent '{agent_data.get('id')}' references missing skill: {skill_id}")
+
+                # Principle Resolution: ID List -> Object List
+                p_ids = agent_data.get("principles", [])
+                resolved_principles = []
+                for p_id in p_ids:
+                    if isinstance(p_id, str):
+                        if p_id in principles_map:
+                            resolved_principles.append(principles_map[p_id])
+                        else:
+                            raise CodexIntegrityError(f"Agent '{agent_data.get('id')}' references missing principle: {p_id}")
+                    else:
+                        # Already an object? (unlikely in JSON but for robustness)
+                        resolved_principles.append(p_id)
+                
+                agent_data["principles"] = resolved_principles
 
                 agent = AgentContext(**agent_data)
                 engine.agent_manager.register(agent)
                 logger.info(f"Loaded Agent: {agent.id}")
+            except CodexIntegrityError as e:
+                logger.error(f"Integrity Error: {e}")
+                raise e
             except Exception as e:
                 logger.error(f"Failed to parse agent: {e}")
+                raise e
 
         # 2. Load Canvas
-        canvas_data = data.get("canvas")
+        canvas_data = data.get("canvas", {})
         if canvas_data:
             try:
                 if "templates" in canvas_data:
                     # TODO: Implement A2UI Template hydration
                     logger.warning("Canvas templates found but not yet supported. Skipping root render.")
-                else:
-                    root = Component(**canvas_data)
+                
+                root_def = canvas_data.get("root")
+                if root_def:
+                    root = Component(**root_def)
                     engine.reflex.set_root(root)
                     logger.info("Loaded Canvas definition")
             except Exception as e:

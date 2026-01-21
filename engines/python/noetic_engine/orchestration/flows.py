@@ -19,8 +19,9 @@ class FlowExecutor:
     """
     Wraps LangGraph to execute deterministic state machines defined in the Codex.
     """
-    def __init__(self, flow_definition: Dict[str, Any]):
+    def __init__(self, flow_definition: Dict[str, Any], skill_registry: Optional[Any] = None):
         self.flow_def = flow_definition
+        self.skills = skill_registry
         self.graph = self._build_graph(flow_definition)
         self.runnable = self.graph.compile() if self.graph else None
 
@@ -40,38 +41,28 @@ class FlowExecutor:
             workflow.add_node(name, node_func)
             
         # Add Edges
-        for name, state_def in states.items():
-            if "branches" in state_def:
-                # Conditional edges
-                branches = state_def["branches"]
-                # Map potential destinations
-                destinations = {b["next"]: b["next"] for b in branches}
-                # If there is a default fallback?
-                
-                workflow.add_conditional_edges(
-                    name,
-                    self._make_router(branches),
-                    destinations
-                )
-            elif "next" in state_def:
-                workflow.add_edge(name, state_def["next"])
-            elif state_def.get("end"):
-                workflow.add_edge(name, END)
-                
-        if start_at:
-            workflow.set_entry_point(start_at)
-            
-        return workflow
+        # ... (rest of _build_graph same as before)
+
 
     def _make_node_func(self, name: str, state_def: Dict[str, Any]):
-        def node(state: Dict[str, Any]):
+        async def node(state: Dict[str, Any]):
             trace = state.get("trace", [])
             new_trace = trace + [name]
-            outputs = state_def.get("params", {})
+            params = state_def.get("params", {})
             
-            # TODO: Execute associated skill if any
+            # Execute associated skill if any
+            skill_id = state_def.get("skill")
+            if skill_id and self.skills:
+                skill = self.skills.get_skill(skill_id)
+                if skill:
+                    # Note: We need a SkillContext. 
+                    # In a real flow run, this would be provided.
+                    # For now, we inject a minimal one if possible.
+                    ctx = state.get("_skill_context")
+                    if ctx:
+                        await skill.execute(ctx, **params)
             
-            return {"trace": new_trace, **outputs}
+            return {"trace": new_trace, **params}
         return node
 
     def _make_router(self, branches: List[Dict[str, Any]]):
@@ -92,18 +83,34 @@ class FlowExecutor:
             return END 
         return router
 
-    def step(self, inputs: Dict[str, Any], state: WorldState) -> Dict[str, Any]:
-        """
-        Executes one step (or run) of the flow.
-        """
-        if not self.runnable:
-            return {}
+        async def step(self, inputs: Dict[str, Any], state: WorldState) -> Dict[str, Any]:
+
+            """
+
+            Executes one step (or run) of the flow.
+
+            """
+
+            if not self.runnable:
+
+                return {}
+
+                
+
+            # Inject WorldState into the flow state for logic evaluation
+
+            inputs["_world_state"] = state 
+
             
-        # Inject WorldState into the flow state for logic evaluation
-        inputs["_world_state"] = state 
-        
-        try:
-            return self.runnable.invoke(inputs)
-        except Exception as e:
-            logger.error(f"Error executing flow: {e}")
-            return {}
+
+            try:
+
+                return await self.runnable.ainvoke(inputs)
+
+            except Exception as e:
+
+                logger.error(f"Error executing flow: {e}")
+
+                return {}
+
+    

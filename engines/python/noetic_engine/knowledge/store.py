@@ -36,6 +36,25 @@ class KnowledgeStore:
 
     def _get_session(self) -> Session:
         return self.SessionLocal()
+
+    from contextlib import contextmanager
+    @contextmanager
+    def transaction(self):
+        """
+        Atomic transaction context manager for SQL and Vector stores.
+        """
+        session = self._get_session()
+        try:
+            # We don't have a native 'transaction' for ChromaDB easily in this version,
+            # but we can ensure SQL commits before we claim success.
+            # If SQL fails, we don't proceed to subsequent logic if caller uses session.
+            yield session
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
     
     def _load_graph_cache(self):
         """Loads all currently active facts into the NetworkX graph."""
@@ -46,31 +65,23 @@ class KnowledgeStore:
 
     def _add_fact_to_graph(self, fact: Fact):
         """Helper to add a single fact to the NetworkX graph."""
-        # Nodes are UUIDs (subject_id) or strings (if we want literal nodes? for now just subjects)
-        # Edges store the predicate and object info
+        # Nodes are stored as strings for consistency with external IDs/Tags
         
-        # If object is an entity, it's an edge to that entity
-        # If object is literal, we might store it as node attribute or specific literal node?
-        # For pathfinding, we usually care about Entity-Entity relations.
+        u = str(fact.subject_id)
         
         if fact.object_entity_id:
+            v = str(fact.object_entity_id)
             self.graph.add_edge(
-                fact.subject_id, 
-                fact.object_entity_id, 
-                key=fact.id,
+                u, v, 
+                key=str(fact.id),
                 predicate=fact.predicate, 
-                weight=1.0 # Default weight, can be modified by principles
+                weight=1.0 
             )
         else:
-            # For literals, maybe we just add it as data to the subject node? 
-            # Or a special edge to a literal node?
-            # Let's add an edge to a literal node identifier for completeness, 
-            # though pathfinding usually doesn't traverse literals.
-            literal_node_id = f"literal:{fact.object_literal}"
+            v = f"literal:{fact.object_literal}"
             self.graph.add_edge(
-                fact.subject_id,
-                literal_node_id,
-                key=fact.id,
+                u, v,
+                key=str(fact.id),
                 predicate=fact.predicate,
                 weight=1.0
             )
@@ -120,14 +131,12 @@ class KnowledgeStore:
                 old_fact.valid_until = now
                 session.add(old_fact)
                 # Remove from Graph Cache
-                # (NetworkX remove_edge requires u, v, key usually. We might need to look it up or rebuild)
-                # Rebuilding might be slow. Removing by key is better if possible.
-                # Since we don't track old object here easily without loading it, let's just rebuild or handle smartly.
-                # Actually we have old_fact.
                 try:
-                    target = old_fact.object_entity_id if old_fact.object_entity_id else f"literal:{old_fact.object_literal}"
-                    if self.graph.has_edge(old_fact.subject_id, target, key=old_fact.id):
-                        self.graph.remove_edge(old_fact.subject_id, target, key=old_fact.id)
+                    u = str(old_fact.subject_id)
+                    v = str(old_fact.object_entity_id) if old_fact.object_entity_id else f"literal:{old_fact.object_literal}"
+                    key = str(old_fact.id)
+                    if self.graph.has_edge(u, v, key=key):
+                        self.graph.remove_edge(u, v, key=key)
                 except Exception:
                     pass # safe ignore if graph out of sync
                 
@@ -210,6 +219,41 @@ class KnowledgeStore:
             
         finally:
             session.close()
+
+    def get_all_parent_tags(self, tags: List[str]) -> List[str]:
+        """
+        Recursively finds all parent tags for the given list of tags.
+        Uses the 'is_a' predicate in the knowledge graph.
+        """
+        all_tags = set(tags)
+        to_process = list(tags)
+        visited = set()
+
+        # Since we use NetworkX for active facts, we can use it for fast traversal
+        # We need to make sure 'is_a' facts are in the graph.
+        # Node IDs in graph are UUIDs or literals.
+        # If tags are names, we might need a mapping name -> UUID.
+        
+        # For simplicity in this reference implementation, let's assume 
+        # tags in ctx.tags can be names or UUID strings.
+        
+        while to_process:
+            current = to_process.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            
+            # Find parents in NetworkX graph
+            # We look for edges (current, parent, predicate='is_a')
+            if current in self.graph:
+                for _, neighbor, data in self.graph.edges(current, data=True):
+                    if data.get("predicate") == "is_a":
+                        parent = str(neighbor)
+                        if parent not in all_tags:
+                            all_tags.add(parent)
+                            to_process.append(parent)
+                            
+        return list(all_tags)
 
     def get_world_state(self, snapshot_time: Optional[datetime] = None) -> WorldState:
         """

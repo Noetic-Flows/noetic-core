@@ -17,9 +17,15 @@ class SkillRegistry:
     def get_all_skills(self) -> List[Skill]:
         return list(self._skills.values())
 
-    def has_permission(self, agent_id: str, skill_id: str) -> bool:
-        # TODO: Integrate with Agent definition to check allowlist
-        return True
+    def has_permission(self, agent_id: str, skill_id: str, agent_manager: Any) -> bool:
+        """
+        Checks if the given agent has permission to use the specified skill.
+        """
+        agent = agent_manager.get(agent_id)
+        if not agent:
+            return False
+        
+        return skill_id in agent.allowed_skills
 
     def poll_inputs(self) -> List[Any]:
         """
