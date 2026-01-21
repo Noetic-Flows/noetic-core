@@ -48,6 +48,39 @@ class LogSkill(Skill):
             latency_ms=int(elapsed)
         )
 
+class TerminateSkill(Skill):
+    id = "skill.system.terminate"
+    description = "Signals the Noetic Engine to stop."
+    schema = {
+        "type": "object",
+        "properties": {
+            "reason": {"type": "string", "default": "Agent requested termination."}
+        },
+        "required": []
+    }
+
+    async def execute(self, context: SkillContext, reason: str = "Agent requested termination.", **kwargs) -> SkillResult:
+        start = time.monotonic()
+        if context.engine:
+            await context.engine.stop()
+            print(f"Agent {context.agent_id} requested engine termination: {reason}")
+            elapsed = (time.monotonic() - start) * 1000
+            return SkillResult(
+                success=True,
+                data={"reason": reason},
+                cost=0.0,
+                latency_ms=int(elapsed)
+            )
+        else:
+            elapsed = (time.monotonic() - start) * 1000
+            return SkillResult(
+                success=False,
+                error="Engine context not available to terminate.",
+                cost=0.0,
+                latency_ms=int(elapsed)
+            )
+
+
 class PlaceholderSkill(Skill):
     id = "skill.placeholder"
     description = "A placeholder for dynamically loaded skills."
@@ -57,6 +90,11 @@ class PlaceholderSkill(Skill):
         self.id = id
         self.description = description
         self.metadata = kwargs
+
+    @property
+    def schema(self) -> Dict[str, Any]:
+        # Placeholder skills don't have a fixed schema, return an empty one
+        return {}
 
     async def execute(self, context: SkillContext, **kwargs) -> SkillResult:
         # Just return success for now

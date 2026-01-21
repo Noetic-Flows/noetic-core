@@ -2,7 +2,7 @@ import heapq
 from typing import List, Dict, Any, Set, Tuple, Optional
 from .schema import Plan, PlanStep, Goal, Action
 from .agents import AgentContext
-from .principles import PrincipleEngine
+from noetic_engine.conscience import Evaluator, JudgementContext, JudgementResult, PolicyViolationError
 from noetic_engine.knowledge import WorldState
 from noetic_engine.skills.registry import SkillRegistry
 from noetic_engine.skills.interfaces import Skill
@@ -11,9 +11,9 @@ class Planner:
     """
     Goal-Oriented Action Planner (GOAP) implementation.
     """
-    def __init__(self, skill_registry: SkillRegistry, principle_engine: Optional[PrincipleEngine] = None):
+    def __init__(self, skill_registry: SkillRegistry, evaluator: Optional[Evaluator] = None):
         self.registry = skill_registry
-        self.principle_engine = principle_engine or PrincipleEngine()
+        self.evaluator = evaluator or Evaluator()
 
     async def generate_plan(self, agent: AgentContext, goal: Goal, state: WorldState) -> Plan:
         """
@@ -69,14 +69,21 @@ class Planner:
                     
                     # Create candidate action for principle evaluation
                     # We assume empty params for planning phase or default
-                    candidate_action = Action(skill_id=skill.id, params={})
                     
-                    if self.principle_engine:
-                        moral_cost = self.principle_engine.evaluate_cost(
-                            candidate_action, 
-                            new_dict, # Use resultant state for evaluation? Or current? Usually resultant.
-                            agent.principles
-                        )
+                    if self.evaluator:
+                        try:
+                            ctx = JudgementContext(
+                                agent_id=agent.id,
+                                action_id=skill.id,
+                                action_args={},
+                                tags=[], # TODO: Get tags from skill definition
+                                world_state=new_dict
+                            )
+                            judgement = self.evaluator.judge(ctx, agent.principles)
+                            moral_cost = judgement.cost
+                        except PolicyViolationError:
+                            # Hard veto -> Path blocked
+                            continue
                     
                     new_g = g + base_cost + moral_cost
                     h = self._heuristic(new_dict, target_state)

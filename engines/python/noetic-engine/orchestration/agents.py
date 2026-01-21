@@ -1,11 +1,6 @@
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
-
-class Principle(BaseModel):
-    id: str
-    affects: str # e.g. "val.privacy"
-    description: Optional[str] = None
-    logic: Dict[str, Any] # JsonLogic
+from noetic_engine.conscience import Principle
 
 class AgentContext(BaseModel):
     id: str

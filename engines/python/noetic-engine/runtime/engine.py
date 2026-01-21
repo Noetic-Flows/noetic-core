@@ -6,7 +6,7 @@ from noetic_engine.skills import SkillRegistry
 from noetic_engine.skills.library.system.control import WaitSkill, LogSkill
 from noetic_engine.skills.library.memory import MemorizeSkill, RecallSkill
 from noetic_engine.orchestration import Planner, AgentManager, FlowManager
-from noetic_engine.orchestration.principles import PrincipleEngine
+from noetic_engine.conscience import Evaluator
 from .reflex import ReflexSystem
 from .cognitive import CognitiveSystem
 from .scheduler import Scheduler
@@ -20,10 +20,10 @@ class NoeticEngine:
         self.skills = SkillRegistry()
         self.agent_manager = AgentManager()
         self.flow_manager = FlowManager()
-        self.principle_engine = PrincipleEngine()
+        self.evaluator = Evaluator()
         
         # Planner requires skills and principles
-        self.planner = Planner(self.skills, self.principle_engine)
+        self.planner = Planner(self.skills, self.evaluator)
         
         self.latest_ui = None
         

@@ -12,6 +12,7 @@ class SkillResult(BaseModel):
 class SkillContext(BaseModel):
     agent_id: str
     store: Optional[Any] = Field(default=None, exclude=True) # Exclude from serialization, hold runtime ref
+    engine: Optional[Any] = Field(default=None, exclude=True) # Access to the NoeticEngine instance
     # Add other context like permissions here
 
 class Skill(ABC):
