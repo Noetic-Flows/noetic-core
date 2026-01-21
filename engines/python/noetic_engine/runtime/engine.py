@@ -60,10 +60,24 @@ class NoeticEngine:
             await asyncio.gather(*self.cognitive.active_tasks, return_exceptions=True)
             self.cognitive.active_tasks.clear()
 
+    def push_event(self, event_type: str, payload: dict = None):
+        """
+        Public API to inject events into the Noetic Engine (e.g. from UI).
+        """
+        self.knowledge.push_event(event_type, payload)
+
+    def refresh_ui(self):
+        """
+        Forces an immediate re-render of the latest UI.
+        """
+        world_state = self.knowledge.get_world_state()
+        self.latest_ui = self.reflex.render_now(world_state)
+
     async def run_loop(self):
         """
         The main Bi-Cameral Execution Loop.
         """
+        print("Noetic Engine Loop Running...")
         while self.running:
             start_time = time.monotonic()
 

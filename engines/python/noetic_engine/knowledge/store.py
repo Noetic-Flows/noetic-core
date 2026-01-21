@@ -14,9 +14,15 @@ from .models import Base, EntityModel, FactModel, TagModel
 from .schema import WorldState, Entity, Fact
 
 class KnowledgeStore:
-    def __init__(self, db_url: str = "sqlite:///:memory:", vector_db_path: Optional[str] = None, collection_name: str = "knowledge_facts"):
+    def __init__(self, db_url: str = "sqlite:///noetic.db", vector_db_path: Optional[str] = None, collection_name: str = "knowledge_facts"):
         self.db_url = db_url
-        self.engine = create_engine(db_url, echo=False)
+        # Use StaticPool for in-memory if requested, but file-based is safer for concurrency
+        if db_url == "sqlite:///:memory:":
+            from sqlalchemy.pool import StaticPool
+            self.engine = create_engine(db_url, echo=False, connect_args={"check_same_thread": False}, poolclass=StaticPool)
+        else:
+            self.engine = create_engine(db_url, echo=False, connect_args={"check_same_thread": False})
+        
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         
         # Initialize DB (Auto-migration for now)
@@ -86,7 +92,7 @@ class KnowledgeStore:
                 weight=1.0
             )
 
-    def ingest_fact(self, subject_id: UUID, predicate: str, object_entity_id: Optional[UUID] = None, object_literal: Optional[str] = None) -> Fact:
+    def ingest_fact(self, subject_id: UUID, predicate: str, object_entity_id: Optional[UUID] = None, object_literal: Optional[str] = None, subject_type: str = "unknown") -> Fact:
         """
         Ingests a fact into the knowledge graph.
         Handles temporal validity and contradictions.
@@ -98,7 +104,10 @@ class KnowledgeStore:
             # 1. Check if the Subject Entity exists
             subject = session.execute(select(EntityModel).where(EntityModel.id == subject_id)).scalar_one_or_none()
             if not subject:
-                subject = EntityModel(id=subject_id, type="unknown")
+                subject = EntityModel(id=subject_id, type=subject_type)
+                session.add(subject)
+            elif subject_type != "unknown":
+                subject.type = subject_type
                 session.add(subject)
             
             # 2. Check for Existing Active Fact (Same Subject, Predicate, Object)
@@ -150,6 +159,17 @@ class KnowledgeStore:
                 valid_until=None
             )
             session.add(new_fact)
+            
+            # Update Entity Attributes for A2UI Data Binding
+            # We treat facts as property updates on the subject entity
+            val = object_literal if object_literal else str(object_entity_id)
+            
+            # Ensure subject attributes is a dict and update
+            attrs = dict(subject.attributes) if subject.attributes else {}
+            attrs[predicate] = val
+            subject.attributes = attrs
+            session.add(subject)
+            
             session.commit()
             session.refresh(new_fact)
             
@@ -264,7 +284,10 @@ class KnowledgeStore:
             
         session = self._get_session()
         try:
-            # Fetch Active Entities (those that are part of any active fact or just exist?)
+            # Clear ORM cache to ensure we get the latest from other threads/processes
+            session.expire_all()
+            
+            # Fetch Active Entities
             # Usually we want all entities.
             # TODO: Add valid_from/until to Entities if we want to track their existence lifespan.
             # For now, just get all entities.
@@ -283,10 +306,17 @@ class KnowledgeStore:
             facts_models = session.execute(facts_stmt).scalars().all()
             facts_list = [self._map_fact_model_to_schema(f) for f in facts_models]
             
+            # Fetch transient events
+            events = []
+            if hasattr(self, "_transient_events"):
+                events = list(self._transient_events)
+                self._transient_events.clear()
+
             return WorldState(
                 tick=int(snapshot_time.timestamp() * 60), # Approx tick count
                 entities=entities_map,
-                facts=facts_list
+                facts=facts_list,
+                event_queue=events
             )
             
         finally:
@@ -312,3 +342,26 @@ class KnowledgeStore:
             created_at=model.created_at,
             updated_at=model.updated_at
         )
+
+    
+
+    def push_event(self, event_type: str, payload: Dict[str, Any] = None):
+        """
+        Pushes a new event into the world state queue.
+        """
+        from .schema import Event
+        event = Event(
+            id=uuid4(),
+            type=event_type,
+            payload=payload or {},
+            timestamp=datetime.utcnow()
+        )
+        # Note: In a persistent DB, we would store this in an 'events' table.
+        # For now, we'll keep a transient session-based queue if needed, 
+        # but get_world_state currently hydrates from DB.
+        # Let's add a simple transient queue to the store for this session.
+        if not hasattr(self, "_transient_events"):
+            self._transient_events = []
+        self._transient_events.append(event)
+
+    

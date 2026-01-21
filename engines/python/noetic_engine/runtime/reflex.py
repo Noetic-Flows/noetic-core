@@ -15,6 +15,15 @@ class ReflexSystem:
     def set_root(self, root: Component):
         self.root_component = root
 
+    def render_now(self, world_state: WorldState) -> Any:
+        """
+        Forces an immediate re-render of the UI with current state.
+        """
+        merged_context = self.manager.merge_state(world_state)
+        if self.root_component:
+            return self.renderer.render(self.root_component, merged_context)
+        return {}
+
     def tick(self, events: List[Any], world_state: WorldState) -> Any:
         """
         Performs one frame of the Reflex Loop.

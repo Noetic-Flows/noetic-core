@@ -20,5 +20,10 @@ class ReflexManager:
         Local state takes precedence for UI responsiveness.
         """
         merged = world_state.model_dump()
-        merged.update(self.local_state)
+        # Ensure the path /ui/local matches what's in the Codex
+        merged["ui"] = {
+            "local": self.local_state
+        }
         return merged
+
+    

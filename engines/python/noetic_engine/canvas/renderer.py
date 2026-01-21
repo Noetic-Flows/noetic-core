@@ -5,10 +5,11 @@ from noetic_engine.knowledge import WorldState
 
 try:
     from fastui import components as c
-    from fastui.events import BackEvent
+    from fastui.events import PageEvent, GoToEvent
 except ImportError:
     c = None
-    BackEvent = None
+    PageEvent = None
+    GoToEvent = None
 
 class CanvasRenderer:
     def __init__(self):
@@ -21,6 +22,21 @@ class CanvasRenderer:
         """
         if c is None:
             return {"error": "FastUI not installed"}
+
+        # Enrich context: Map entities by 'name' attribute for easier binding
+        if "entities" in context:
+            # We must be careful not to mutate the original context if it's shared
+            entities = context["entities"]
+            enriched_entities = entities.copy()
+            for eid, entity in entities.items():
+                if isinstance(entity, dict) and "attributes" in entity:
+                    name = entity["attributes"].get("name")
+                    if name:
+                        enriched_entities[name] = entity
+            
+            # Create a shallow copy of context with enriched entities
+            context = context.copy()
+            context["entities"] = enriched_entities
 
         return self._visit(root, context)
 
@@ -38,7 +54,8 @@ class CanvasRenderer:
             
         elif isinstance(node, Button):
             text = self._resolve(node.label, context)
-            on_click = BackEvent(type=node.action_id) if BackEvent else None
+            action_id = self._resolve(node.action_id, context)
+            on_click = GoToEvent(url=f"/?event={action_id}") if GoToEvent else None
             return c.Button(text=str(text), on_click=on_click)
             
         elif isinstance(node, Column):
@@ -51,6 +68,19 @@ class CanvasRenderer:
             
         elif isinstance(node, ForEach):
             items = self._resolve(node.items, context)
+            if isinstance(items, dict):
+                # Use a list of unique values to avoid duplicates from name-aliasing
+                seen_ids = set()
+                unique_items = []
+                for val in items.values():
+                    if isinstance(val, dict) and "id" in val:
+                        oid = str(val["id"])
+                        if oid not in seen_ids:
+                            seen_ids.add(oid)
+                            unique_items.append(val)
+                    else:
+                        unique_items.append(val)
+                items = unique_items
             if not isinstance(items, list):
                 items = []
             

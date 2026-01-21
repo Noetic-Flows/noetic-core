@@ -41,7 +41,16 @@
         { "id": "tag.data_export", "name": "Data Export", "is_a": "tag.destructive" },
         { "id": "tag.compute_intensive", "name": "High Compute" }
       ]
-    }
+    },
+    "initial_state": [
+      ["project.alpha", "name", "project.alpha"],
+      ["project.alpha", "title", "Secret Moon Base"],
+      ["project.alpha", "priority", 10],
+      ["project.alpha", "status", "active"],
+      ["project.beta", "name", "project.beta"],
+      ["project.beta", "title", "Deep Sea Mining"],
+      ["project.beta", "status", "planning"]
+    ]
   },
   "skills": [
     {
@@ -210,7 +219,7 @@
                   "template": {
                     "type": "Button",
                     "label": { "bind": "/project/attributes/title", "fallback": "Unnamed Project" },
-                    "action_id": "ui.select_project"
+                    "action_id": { "bind": "/project/attributes/name", "fallback": "ui.select_project" }
                   }
                 }
               ]

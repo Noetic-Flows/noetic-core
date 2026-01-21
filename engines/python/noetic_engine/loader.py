@@ -4,6 +4,7 @@ from noetic_engine.runtime import NoeticEngine
 from noetic_engine.orchestration import AgentContext
 from noetic_engine.conscience import Principle
 from noetic_engine.canvas import Component
+from noetic_engine.canvas.schema import parse_component
 from noetic_engine.skills.library.system.control import PlaceholderSkill
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,38 @@ class NoeticLoader:
         except Exception as e:
             logger.error(f"Failed to load Codex file: {e}")
             return
+
+        # 0.5 Load Initial Knowledge
+        knowledge_data = data.get("knowledge", {})
+        initial_state = knowledge_data.get("initial_state", [])
+        for fact_def in initial_state:
+            try:
+                import uuid
+                # Simple mapper: [subject_id, predicate, object]
+                if isinstance(fact_def, list) and len(fact_def) == 3:
+                    sub_id, pred, obj = fact_def
+                    # Generate deterministic UUID for named entities if they aren't UUIDs
+                    try:
+                        u_sub = uuid.UUID(sub_id)
+                    except ValueError:
+                        u_sub = uuid.uuid5(uuid.NAMESPACE_DNS, sub_id)
+                    
+                    # Infer type from prefix
+                    subject_type = "Project" if sub_id.startswith("project.") else "unknown"
+                    
+                    if isinstance(obj, str) and obj.startswith("entity:"):
+                        # Object is an entity reference
+                        obj_entity_name = obj.replace("entity:", "")
+                        u_obj = uuid.uuid5(uuid.NAMESPACE_DNS, obj_entity_name)
+                        engine.knowledge.ingest_fact(u_sub, pred, object_entity_id=u_obj, subject_type=subject_type)
+                    else:
+                        # Object is a literal
+                        engine.knowledge.ingest_fact(u_sub, pred, object_literal=str(obj), subject_type=subject_type)
+                    
+                    # Also ensure the entity has a 'name' attribute for easier binding lookup
+                    engine.knowledge.ingest_fact(u_sub, "name", object_literal=sub_id, subject_type=subject_type)
+            except Exception as e:
+                logger.error(f"Failed to load initial fact {fact_def}: {e}")
 
         # 1. Load Skills (Load these first so Agents can reference them)
         skills_data = data.get("skills", [])
@@ -108,7 +141,7 @@ class NoeticLoader:
                 
                 root_def = canvas_data.get("root")
                 if root_def:
-                    root = Component(**root_def)
+                    root = parse_component(root_def)
                     engine.reflex.set_root(root)
                     logger.info("Loaded Canvas definition")
             except Exception as e:

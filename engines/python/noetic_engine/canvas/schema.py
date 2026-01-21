@@ -4,17 +4,14 @@ from pydantic import BaseModel, Field
 
 # A2UI Schema
 
-class Binding(BaseModel):
-    bind: str # JSON Pointer
-    fallback: Optional[Any] = None
-
 class Component(BaseModel):
     type: str
     id: Optional[str] = None
     style: Optional[Dict[str, Any]] = None
 
-class Container(Component):
-    children: List[Union[Component, Any]] # Any for recursion
+class Binding(BaseModel):
+    bind: str # JSON Pointer
+    fallback: Optional[Any] = None
 
 class Text(Component):
     type: Literal["Text"] = "Text"
@@ -23,7 +20,12 @@ class Text(Component):
 class Button(Component):
     type: Literal["Button"] = "Button"
     label: Union[str, Binding]
-    action_id: str
+    action_id: Union[str, Binding]
+
+AnyComponent = Union["Column", "Row", "Text", "Button", "ForEach", "Component"]
+
+class Container(Component):
+    children: List[AnyComponent]
 
 class Column(Container):
     type: Literal["Column"] = "Column"
@@ -34,9 +36,28 @@ class Row(Container):
 class ForEach(Component):
     type: Literal["ForEach"] = "ForEach"
     items: Union[List[Any], Binding]
-    template: Union[Component, Any] # The template to render for each item
+    template: AnyComponent # The template to render for each item
     var: str = "item" # The variable name to expose in the child scope
 
 # Update forward refs
-Container.model_rebuild()
+Column.model_rebuild()
+Row.model_rebuild()
 ForEach.model_rebuild()
+
+def parse_component(data: Dict[str, Any]) -> AnyComponent:
+    """
+    Parses a component dictionary into the appropriate A2UI subclass.
+    """
+    ctype = data.get("type")
+    if ctype == "Column":
+        return Column(**data)
+    if ctype == "Row":
+        return Row(**data)
+    if ctype == "Text":
+        return Text(**data)
+    if ctype == "Button":
+        return Button(**data)
+    if ctype == "ForEach":
+        return ForEach(**data)
+    
+    return Component(**data)
