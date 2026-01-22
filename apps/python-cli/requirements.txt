@@ -1,0 +1,4 @@
+-e ../../packages/lang-python
+-e ../../packages/engine-python
+fastapi
+uvicorn
