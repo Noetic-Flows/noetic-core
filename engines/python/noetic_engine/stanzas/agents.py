@@ -1,10 +1,9 @@
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel
-from noetic_engine.conscience import Principle
+from typing import Dict, Any, Optional
+from noetic_lang.core import AgentDefinition, Principle
 
-class AgentContext(BaseModel):
-    id: str
-    system_prompt: str
-    allowed_skills: List[str]
-    principles: List[Principle]
-    persona: Optional[Dict[str, Any]] = None
+# Alias Agent to AgentContext for backward compatibility if needed, 
+# or just use Agent directly in the engine. 
+# The engine previously called it AgentContext.
+AgentContext = AgentDefinition
+
+__all__ = ["AgentContext", "Principle"]
