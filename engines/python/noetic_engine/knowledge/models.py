@@ -30,6 +30,7 @@ class FactModel(Base):
     object_entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("entities.id"), nullable=True)
     object_literal: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    source_type: Mapped[str] = mapped_column(String, default="inference")
     
     # Temporal Columns
     valid_from: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

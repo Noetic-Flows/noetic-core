@@ -3,6 +3,7 @@ import logging
 from noetic_engine.knowledge import KnowledgeStore, WorldState
 from noetic_engine.skills import SkillRegistry, SkillContext
 from noetic_engine.orchestration import Planner, AgentContext, Goal, PlanStep, AgentManager
+from noetic_engine.orchestration.evaluator import Evaluator as RedTeamEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +12,12 @@ class CognitiveSystem:
     Manages the 'Cognitive Loop' (System 2) - Planning and Decision Making.
     Running asynchronously from the UI loop.
     """
-    def __init__(self, knowledge: KnowledgeStore, skills: SkillRegistry, planner: Planner, agent_manager: AgentManager):
+    def __init__(self, knowledge: KnowledgeStore, skills: SkillRegistry, planner: Planner, agent_manager: AgentManager, red_teamer: RedTeamEvaluator = None):
         self.knowledge = knowledge
         self.skills = skills
         self.planner = planner
         self.agent_manager = agent_manager
+        self.red_teamer = red_teamer
         self.active_tasks = set()
 
     async def process_next(self, state: WorldState):
@@ -43,6 +45,31 @@ class CognitiveSystem:
             
             plan = await self.planner.generate_plan(agent, goal, state)
             
+            # --- Confidence Engine Logic ---
+            # 1. Risk Check
+            # Using total_cost as proxy for Risk Score for now
+            risk_threshold = 10.0 # TODO: Load from Manifest
+            plan.risk_score = plan.total_cost
+            
+            if plan.risk_score > risk_threshold:
+                if self.red_teamer:
+                    logger.info(f"High Risk Plan ({plan.risk_score}). Triggering Red Team...")
+                    # Build context string (simplified)
+                    context_str = f"User: {event.payload}" 
+                    eval_result = await self.red_teamer.evaluate(goal.description, plan, context_str)
+                    
+                    plan.confidence_score = eval_result.confidence_score
+                    plan.confidence_rationale = eval_result.rationale
+                    
+                    min_confidence = 0.7 # TODO: Load from Manifest
+                    
+                    if plan.confidence_score < min_confidence:
+                        logger.warning(f"⛔ Plan REJECTED by Critic. Confidence: {plan.confidence_score}. Reason: {plan.confidence_rationale}")
+                        # TODO: Feed back to Planner or User
+                        return
+                else:
+                    logger.warning("High risk plan detected but no Red Teamer configured. Proceeding with caution.")
+
             for step in plan.steps:
                 await self._execute_step(step, agent)
         except Exception as e:

@@ -39,9 +39,69 @@ class KnowledgeStore:
         # Initialize Graph Cache
         self.graph = nx.MultiDiGraph()
         self._load_graph_cache()
+        
+        self.summarizer = None # Callable[[List[str]], Awaitable[str]]
 
     def _get_session(self) -> Session:
         return self.SessionLocal()
+
+    async def _fold_episodes(self):
+        """
+        Consolidates granular 'episodic_log' facts into 'episodic_summary' facts.
+        """
+        if not self.summarizer:
+            return
+
+        session = self._get_session()
+        try:
+            # 1. Find active 'episodic_log' facts
+            stmt = select(FactModel).where(
+                FactModel.predicate == "episodic_log",
+                FactModel.valid_until.is_(None)
+            )
+            logs = session.execute(stmt).scalars().all()
+            
+            # 2. Group by subject
+            from collections import defaultdict
+            grouped = defaultdict(list)
+            for log in logs:
+                grouped[log.subject_id].append(log)
+            
+            # 3. Process groups
+            timestamp = datetime.utcnow()
+            for subject_id, subject_logs in grouped.items():
+                if len(subject_logs) >= 3: # Consolidation Threshold
+                    # Generate Summary
+                    text_logs = [l.object_literal for l in subject_logs]
+                    summary = await self.summarizer(text_logs)
+                    
+                    # Archive old logs
+                    for log in subject_logs:
+                        log.valid_until = timestamp
+                        session.add(log)
+                        # TODO: Remove from Graph/Chroma if strict consistency needed
+                    
+                    # Create Summary Fact
+                    new_fact = FactModel(
+                        subject_id=subject_id,
+                        predicate="episodic_summary",
+                        object_literal=summary,
+                        valid_from=timestamp
+                    )
+                    session.add(new_fact)
+            
+            session.commit()
+            
+            # Refresh Graph Cache (lazy way)
+            self._load_graph_cache()
+            
+        except Exception as e:
+            session.rollback()
+            import logging
+            logging.getLogger("noetic.knowledge").error(f"Folding failed: {e}")
+            raise e
+        finally:
+            session.close()
 
     from contextlib import contextmanager
     @contextmanager
@@ -92,121 +152,126 @@ class KnowledgeStore:
                 weight=1.0
             )
 
-    def ingest_fact(self, subject_id: UUID, predicate: str, object_entity_id: Optional[UUID] = None, object_literal: Optional[str] = None, subject_type: str = "unknown") -> Fact:
-        """
-        Ingests a fact into the knowledge graph.
-        Handles temporal validity and contradictions.
-        """
-        session = self._get_session()
-        try:
-            now = datetime.utcnow()
-            
-            # 1. Check if the Subject Entity exists
-            subject = session.execute(select(EntityModel).where(EntityModel.id == subject_id)).scalar_one_or_none()
-            if not subject:
-                subject = EntityModel(id=subject_id, type=subject_type)
-                session.add(subject)
-            elif subject_type != "unknown":
-                subject.type = subject_type
-                session.add(subject)
-            
-            # 2. Check for Existing Active Fact (Same Subject, Predicate, Object)
-            stmt = select(FactModel).where(
-                FactModel.subject_id == subject_id,
-                FactModel.predicate == predicate,
-                FactModel.valid_until.is_(None)
-            )
-            
-            if object_entity_id:
-                stmt = stmt.where(FactModel.object_entity_id == object_entity_id)
-            else:
-                stmt = stmt.where(FactModel.object_literal == object_literal)
+        def ingest_fact(self, subject_id: UUID, predicate: str, object_entity_id: Optional[UUID] = None, object_literal: Optional[str] = None, subject_type: str = "unknown", confidence: float = 1.0, source_type: str = "inference") -> Fact:
+            """
+            Ingests a fact into the knowledge graph.
+            Handles temporal validity and contradictions.
+            """
+            session = self._get_session()
+            try:
+                now = datetime.utcnow()
                 
-            existing_exact_fact = session.execute(stmt).scalar_one_or_none()
-            
-            if existing_exact_fact:
-                return self._map_fact_model_to_schema(existing_exact_fact)
-
-            # 3. Check for Contradictions
-            contradiction_stmt = select(FactModel).where(
-                FactModel.subject_id == subject_id,
-                FactModel.predicate == predicate,
-                FactModel.valid_until.is_(None)
-            )
-            
-            existing_contradictions = session.execute(contradiction_stmt).scalars().all()
-            
-            for old_fact in existing_contradictions:
-                old_fact.valid_until = now
-                session.add(old_fact)
-                # Remove from Graph Cache
-                try:
-                    u = str(old_fact.subject_id)
-                    v = str(old_fact.object_entity_id) if old_fact.object_entity_id else f"literal:{old_fact.object_literal}"
-                    key = str(old_fact.id)
-                    if self.graph.has_edge(u, v, key=key):
-                        self.graph.remove_edge(u, v, key=key)
-                except Exception:
-                    pass # safe ignore if graph out of sync
+                # 1. Check if the Subject Entity exists
+                subject = session.execute(select(EntityModel).where(EntityModel.id == subject_id)).scalar_one_or_none()
+                if not subject:
+                    subject = EntityModel(id=subject_id, type=subject_type)
+                    session.add(subject)
+                elif subject_type != "unknown":
+                    subject.type = subject_type
+                    session.add(subject)
                 
-            # 4. Insert New Fact
-            new_fact = FactModel(
-                subject_id=subject_id,
-                predicate=predicate,
-                object_entity_id=object_entity_id,
-                object_literal=object_literal,
-                valid_from=now,
-                valid_until=None
-            )
-            session.add(new_fact)
-            
-            # Update Entity Attributes for A2UI Data Binding
-            # We treat facts as property updates on the subject entity
-            val = object_literal if object_literal else str(object_entity_id)
-            
-            # Ensure subject attributes is a dict and update
-            attrs = dict(subject.attributes) if subject.attributes else {}
-            attrs[predicate] = val
-            subject.attributes = attrs
-            session.add(subject)
-            
-            session.commit()
-            session.refresh(new_fact)
-            
-            fact_schema = self._map_fact_model_to_schema(new_fact)
-
-            # 5. Ingest into ChromaDB
-            # Text representation: "Subject predicate Object"
-            obj_str = str(object_entity_id) if object_entity_id else str(object_literal)
-            doc_text = f"Fact: {predicate} {obj_str}" # Focus on predicate and object for search
-            
-            metadata = {
-                "subject_id": str(subject_id),
-                "predicate": predicate,
-                "object": obj_str,
-                "type": "fact",
-                "valid_from": now.isoformat()
-            }
-            
-            self.collection.add(
-                documents=[doc_text],
-                metadatas=[metadata],
-                ids=[str(new_fact.id)]
-            )
-            
-            # 6. Update Graph Cache
-            self._add_fact_to_graph(fact_schema)
-            
-            return fact_schema
-            
-        except Exception as e:
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-            
-    def hybrid_search(self, query: str, limit: int = 5) -> List[Fact]:
-        """
+                # 2. Check for Existing Active Fact (Same Subject, Predicate, Object)
+                stmt = select(FactModel).where(
+                    FactModel.subject_id == subject_id,
+                    FactModel.predicate == predicate,
+                    FactModel.valid_until.is_(None)
+                )
+                
+                if object_entity_id:
+                    stmt = stmt.where(FactModel.object_entity_id == object_entity_id)
+                else:
+                    stmt = stmt.where(FactModel.object_literal == object_literal)
+                    
+                existing_exact_fact = session.execute(stmt).scalar_one_or_none()
+                
+                if existing_exact_fact:
+                    # Update metadata if needed (e.g. confidence refinement)
+                    # For now, just return existing
+                    return self._map_fact_model_to_schema(existing_exact_fact)
+    
+                # 3. Check for Contradictions
+                contradiction_stmt = select(FactModel).where(
+                    FactModel.subject_id == subject_id,
+                    FactModel.predicate == predicate,
+                    FactModel.valid_until.is_(None)
+                )
+                
+                existing_contradictions = session.execute(contradiction_stmt).scalars().all()
+                
+                for old_fact in existing_contradictions:
+                    old_fact.valid_until = now
+                    session.add(old_fact)
+                    # Remove from Graph Cache
+                    try:
+                        u = str(old_fact.subject_id)
+                        v = str(old_fact.object_entity_id) if old_fact.object_entity_id else f"literal:{old_fact.object_literal}"
+                        key = str(old_fact.id)
+                        if self.graph.has_edge(u, v, key=key):
+                            self.graph.remove_edge(u, v, key=key)
+                    except Exception:
+                        pass # safe ignore if graph out of sync
+                    
+                # 4. Insert New Fact
+                new_fact = FactModel(
+                    subject_id=subject_id,
+                    predicate=predicate,
+                    object_entity_id=object_entity_id,
+                    object_literal=object_literal,
+                    valid_from=now,
+                    valid_until=None,
+                    confidence=confidence,
+                    source_type=source_type
+                )
+                session.add(new_fact)
+                
+                # Update Entity Attributes for A2UI Data Binding
+                # We treat facts as property updates on the subject entity
+                val = object_literal if object_literal else str(object_entity_id)
+                
+                # Ensure subject attributes is a dict and update
+                attrs = dict(subject.attributes) if subject.attributes else {}
+                attrs[predicate] = val
+                subject.attributes = attrs
+                session.add(subject)
+                
+                session.commit()
+                session.refresh(new_fact)
+                
+                fact_schema = self._map_fact_model_to_schema(new_fact)
+    
+                # 5. Ingest into ChromaDB
+                # Text representation: "Subject predicate Object"
+                obj_str = str(object_entity_id) if object_entity_id else str(object_literal)
+                doc_text = f"Fact: {predicate} {obj_str}" # Focus on predicate and object for search
+                
+                metadata = {
+                    "subject_id": str(subject_id),
+                    "predicate": predicate,
+                    "object": obj_str,
+                    "type": "fact",
+                    "valid_from": now.isoformat(),
+                    "confidence": confidence,
+                    "source_type": source_type
+                }
+                
+                self.collection.add(
+                    documents=[doc_text],
+                    metadatas=[metadata],
+                    ids=[str(new_fact.id)]
+                )
+                
+                # 6. Update Graph Cache
+                self._add_fact_to_graph(fact_schema)
+                
+                return fact_schema
+                
+            except Exception as e:
+                session.rollback()
+                raise e
+            finally:
+                session.close()
+    
+        def hybrid_search(self, query: str, limit: int = 5) -> List[Fact]:        """
         Performs a hybrid search:
         1. Semantic search in ChromaDB.
         2. Filters results for validity in SQL (or just by checking valid_until via ID lookup).
@@ -330,6 +395,7 @@ class KnowledgeStore:
             object_entity_id=model.object_entity_id,
             object_literal=model.object_literal,
             confidence=model.confidence,
+            source_type=model.source_type,
             valid_from=model.valid_from,
             valid_until=model.valid_until
         )
@@ -376,13 +442,12 @@ class KnowledgeStore:
         logger.info("Starting Sleep Cycle...")
         
         try:
-            # 1. Chunked/Async consolidation
-            # For now, just simulate work
-            for i in range(5):
-                logger.debug(f"Sleep Cycle: Consolidating chunk {i+1}/5...")
-                await asyncio.sleep(0.5) # Simulate IO
-                
-                # Check cancellation in loop (asyncio.sleep handles it, but logic might need explicit checks)
+            # 1. Episode Folding (Consolidation)
+            logger.info("Sleep Cycle: Folding episodes...")
+            await self._fold_episodes()
+            
+            # 2. Yield to event loop to simulate chunked work / allow interrupts
+            await asyncio.sleep(0.1)
             
             logger.info("Sleep Cycle Complete.")
             
