@@ -1,10 +1,10 @@
 import json
 import logging
 from noetic_engine.runtime import NoeticEngine
-from noetic_engine.orchestration import AgentContext
-from noetic_engine.conscience import Principle
-from noetic_engine.canvas import Component
-from noetic_engine.canvas.schema import parse_component
+from noetic_lang.core import AgentDefinition as AgentContext
+from noetic_conscience import Principle
+from noetic_stage import Component
+from noetic_stage.schema import parse_component
 from noetic_engine.skills.library.system.control import PlaceholderSkill
 
 logger = logging.getLogger(__name__)

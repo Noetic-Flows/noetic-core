@@ -2,8 +2,8 @@ import heapq
 from typing import List, Dict, Any, Set, Tuple, Optional
 from noetic_lang.core import Plan, PlanStep, Goal, Action
 from noetic_lang.core import AgentDefinition as AgentContext
-from noetic_engine.conscience import Evaluator, JudgementContext, JudgementResult, PolicyViolationError
-from noetic_engine.knowledge import WorldState
+from noetic_conscience import Evaluator, JudgementContext, JudgementResult, PolicyViolationError
+from noetic_knowledge import WorldState
 from noetic_engine.skills.registry import SkillRegistry
 from noetic_engine.skills.interfaces import Skill
 

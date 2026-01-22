@@ -2,14 +2,16 @@ import json
 import os
 import sys
 
-# Ensure we can import the local package even if not installed
-# Scripts is in packages/lang-python/scripts, so we go up one level to packages/lang-python
+# Ensure we can import the local package
+# Script is in packages/lang-python/scripts/
+# Package is in packages/lang-python/
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from noetic_lang.core import StanzaDefinition, FlowDefinition, AgentDefinition
 
-# Output to packages/spec/schemas (two levels up from scripts)
-SPEC_DIR = os.path.join(os.path.dirname(__file__), "../../spec/schemas")
+# Output to packages/spec/schemas/
+# ../../spec/schemas
+SPEC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../spec/schemas"))
 os.makedirs(SPEC_DIR, exist_ok=True)
 
 def write_schema(model, filename):
