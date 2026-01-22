@@ -26,4 +26,3 @@ class VetoSwitch:
                 reason="Principle evaluated to INFINITY (Hard Veto)",
                 context=context
             )
-        super().__init__()

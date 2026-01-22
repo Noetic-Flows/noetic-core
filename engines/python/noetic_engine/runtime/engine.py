@@ -116,4 +116,3 @@ class NoeticEngine:
             # --- 3. SLEEP ---
             await self.scheduler.sleep_until_next_tick(start_time)
 
-    

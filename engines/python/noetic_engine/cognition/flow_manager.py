@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Any
-from noetic_engine.stanzas.flows import FlowExecutor
+from noetic_engine.runtime.executors.flow import FlowExecutor
 
 class FlowManager:
     def __init__(self):

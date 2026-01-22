@@ -60,7 +60,8 @@ def server():
     if not connected:
         proc.terminate()
         # Skip if server fails to start (likely due to environment issues in restricted CLI)
-        pytest.skip("Test server failed to start")
+        # pytest.skip("Test server failed to start")
+        raise RuntimeError("Test server failed to start")
         
     yield f"http://127.0.0.1:{port}"
     

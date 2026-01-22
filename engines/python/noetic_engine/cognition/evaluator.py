@@ -1,6 +1,6 @@
 from typing import Protocol, Any
 from pydantic import BaseModel
-from noetic_engine.stanzas.schema import Plan
+from noetic_lang.core import Plan
 
 class EvaluationResult(BaseModel):
     confidence_score: float
