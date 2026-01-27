@@ -61,15 +61,20 @@ async def test_wake_interrupt(lifecycle_manager):
     assert lifecycle_manager.state == "AWAKE"
     assert lifecycle_manager.maintenance_task.cancelled() or lifecycle_manager.maintenance_task.done()
 
-@pytest.mark.asyncio
-async def test_interaction_resets_timer(lifecycle_manager):
-    # Wait a bit
-    await asyncio.sleep(IDLE_TIMEOUT / 2)
-    await lifecycle_manager.notify_interaction()
+    @pytest.mark.asyncio
+    async def test_interaction_resets_timer(lifecycle_manager):
+        # Wait a bit (half timeout)
+        await asyncio.sleep(IDLE_TIMEOUT / 2)
+        await lifecycle_manager.notify_interaction()
     
-    # Wait another bit (total > IDLE_TIMEOUT if not reset)
-    await asyncio.sleep(IDLE_TIMEOUT / 2 + 0.05)
-    await lifecycle_manager.tick()
+        # Wait another bit (half timeout). Total since start > timeout, but since reset < timeout.
+        await asyncio.sleep(IDLE_TIMEOUT / 2)
+        await lifecycle_manager.tick()
     
-    # Should still be AWAKE because timer was reset
-    assert lifecycle_manager.state == "AWAKE"
+        # Should still be AWAKE because timer was reset
+        assert lifecycle_manager.state == "AWAKE"
+        
+        # Now wait enough to expire
+        await asyncio.sleep(IDLE_TIMEOUT)
+        await lifecycle_manager.tick()
+        assert lifecycle_manager.state == "IDLE"

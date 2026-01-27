@@ -1,5 +1,5 @@
 import pytest
-from noetic_engine.conscience import Evaluator, Principle, JudgementContext, PolicyViolationError
+from noetic_conscience import Evaluator, Principle, JudgementContext, PolicyViolationError
 
 def test_veto_infinity_cost():
     evaluator = Evaluator()

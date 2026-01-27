@@ -13,14 +13,14 @@ def test_relevance_scoring():
         id=uuid4(), subject_id=uuid4(), predicate="test", object_literal="A",
         valid_from=now - timedelta(minutes=1),
         confidence=1.0,
-        source_type="observation"
+        source_type="inference"
     )
     
     fact_old = Fact(
         id=uuid4(), subject_id=uuid4(), predicate="test", object_literal="B",
         valid_from=now - timedelta(days=1),
         confidence=1.0,
-        source_type="observation"
+        source_type="inference"
     )
     
     # Nexus should score recent facts higher if semantic relevance is equal

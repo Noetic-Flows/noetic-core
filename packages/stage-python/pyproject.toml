@@ -12,7 +12,7 @@ dependencies = [
     "pydantic>=2.0",
     "jsonpointer",
     "fastui",
-    "noetic-knowledge @ file://../knowledge-python"
+    "noetic-knowledge"
 ]
 
 [tool.setuptools.packages.find]

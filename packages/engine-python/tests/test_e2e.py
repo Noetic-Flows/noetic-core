@@ -8,7 +8,7 @@ from noetic_engine.loader import NoeticLoader
 import sys
 # Adjust path to import main from apps/python-cli
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../apps/python-cli")))
-from main import create_app
+from noetic_engine.server import create_app
 
 @pytest.fixture
 def e2e_setup():

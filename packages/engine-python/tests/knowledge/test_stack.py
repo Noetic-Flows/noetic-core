@@ -1,5 +1,5 @@
 import pytest
-from noetic_engine.knowledge.working.stack import MemoryStack, MemoryFrame, LogEntry
+from noetic_knowledge.working.stack import MemoryStack, MemoryFrame, LogEntry
 
 @pytest.fixture
 def stack():

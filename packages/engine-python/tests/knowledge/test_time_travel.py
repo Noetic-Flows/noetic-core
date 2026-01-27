@@ -2,7 +2,7 @@ import pytest
 import time
 from datetime import datetime, timedelta
 from uuid import uuid4
-from noetic_engine.knowledge.store import KnowledgeStore
+from noetic_knowledge.store.store import KnowledgeStore
 
 @pytest.fixture
 def store():

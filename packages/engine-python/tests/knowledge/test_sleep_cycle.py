@@ -3,8 +3,8 @@ import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
-from noetic_engine.knowledge.store import KnowledgeStore
-from noetic_engine.knowledge.schema import Fact
+from noetic_knowledge.store.store import KnowledgeStore
+from noetic_knowledge.store.schema import Fact
 
 @pytest.fixture
 def store():
@@ -46,7 +46,7 @@ async def test_consolidation_logic(store):
     # Predicate "episodic_log" is a good candidate for folding
     facts = []
     for i in range(5):
-        f = store.ingest_fact(subject_id, "episodic_log", object_literal=f"step {i}")
+        f = store.ingest_fact(subject_id, "episodic_log", object_literal=f"step {i}", allow_multiple=True)
         facts.append(f)
         
     # 2. Run Sleep Cycle
@@ -56,12 +56,13 @@ async def test_consolidation_logic(store):
     # 3. Assertions
     state = store.get_world_state()
     
-    # Check that original facts are gone (valid_until set, so get_world_state ignores them)
-    # But wait, get_world_state returns active facts.
-    # So if they are folded, they should NOT be in 'state.facts'.
-    
     # Filter facts for our subject
     active_facts = [f for f in state.facts if f.subject_id == subject_id and f.predicate == "episodic_log"]
+    
+    # Debug info if assertion fails
+    if len(active_facts) > 0:
+        print(f"Active facts remaining: {[f.object_literal for f in active_facts]}")
+        
     assert len(active_facts) == 0, "Raw episodic logs should be archived"
     
     # Check for summary fact

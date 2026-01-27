@@ -9,5 +9,5 @@ class AgentDefinition(BaseModel):
     id: str
     system_prompt: str
     allowed_skills: List[str]
-    principles: List[Principle]
+    principles: List[Any]
     persona: Optional[Dict[str, Any]] = None

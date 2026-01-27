@@ -1,6 +1,6 @@
 import json
 import logging
-from noetic_engine.runtime import NoeticEngine
+from noetic_engine.runtime.engine import NoeticEngine
 from noetic_lang.core import AgentDefinition as AgentContext
 from noetic_conscience import Principle
 from noetic_stage import Component

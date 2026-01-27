@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from noetic_engine.orchestration.flows import FlowExecutor
-from noetic_engine.knowledge import WorldState
+from noetic_engine.runtime.executors.flow import FlowExecutor
+from noetic_knowledge import WorldState
 
 # Minimal flow definition
 SIMPLE_FLOW = {

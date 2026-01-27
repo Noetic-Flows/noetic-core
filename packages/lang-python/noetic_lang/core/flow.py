@@ -2,10 +2,13 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field, model_validator
 
 class FlowState(BaseModel):
-    name: str
+    name: Optional[str] = None
+    description: Optional[str] = None
+    type: str = "Task" # Task, Stanza, Interaction
     skill: Optional[str] = None
     params: Dict[str, Any] = Field(default_factory=dict)
     next: Optional[str] = None # Simple transition
+    end: bool = False
     # We will need conditional transitions logic here eventually
 
 class FlowDefinition(BaseModel):

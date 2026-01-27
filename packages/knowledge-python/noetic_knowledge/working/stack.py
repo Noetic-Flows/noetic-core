@@ -13,9 +13,8 @@ class MemoryFrame(BaseModel):
     context: dict = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-class MemoryStack:
-    def __init__(self):
-        self.frames: List[MemoryFrame] = []
+class MemoryStack(BaseModel):
+    frames: List[MemoryFrame] = Field(default_factory=list)
 
     @property
     def current_frame(self) -> Optional[MemoryFrame]:

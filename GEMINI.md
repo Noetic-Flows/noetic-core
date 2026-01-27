@@ -5,7 +5,7 @@
 
 ---
 
-## 1. The Vision: Portable Intelligence
+## 1. The Vision: Portable, Enterprise-Grade Intelligence
 
 We are building a **Federated Monorepo** containing a **Layered SDK**. Our goal is to create a modular suite of AI tools that allow developers to define, execute, and share Agentic workflows.
 
@@ -13,8 +13,9 @@ We are building a **Federated Monorepo** containing a **Layered SDK**. Our goal 
 
 1. **Flows > Apps:** Software is not a static script; it is a dynamic graph of intents (Flows).
 2. **Stanza-Based Execution:** Flows are composed of **Stanzas** (Logical Phases). A Stanza scopes the Agent's goal, tools, and memory.
-3. **AgentProg Memory:** We reject "Context Window Stuffing." We use a strict **Stack (Working Memory)** and **Heap (Long-term Store)** architecture to prevent hallucination.
-4. **Portable Knowledge:** Agents verify their own knowledge dependencies ("I need to know GDPR") and use **Seeds** to learn missing concepts instantly.
+3. **AgentProg Memory:** We reject "Context Window Stuffing." We use a strict **Stack (Working Memory)** and **Heap (Long-term Store)** architecture.
+4. **Portable Knowledge:** Agents verify their own knowledge dependencies and use **Seeds** to learn missing concepts instantly.
+5. **Enterprise Readiness:** The system must be secure, observable, and resilient. It supports **Local-First** execution, **Dynamic Failover**, and strict **IAM/ACLs**.
 
 ---
 
@@ -28,9 +29,9 @@ You must strictly adhere to this file structure. Do not create files outside the
 │   ├── spec/                          # LAYER 1: The Protocol (JSON Schemas)
 │   ├── stdlib/                        # LAYER 2: The Content (Standard Stanzas/Agents)
 │   ├── lang-python/                   # LAYER 3: Data Bindings (Pydantic Models)
-│   ├── knowledge-python/              # LAYER 4a: Memory Library (Graph/Vector/Stack)
-│   ├── stage-python/                  # LAYER 4b: Interface Library (UI/Voice)
-│   ├── conscience-python/             # LAYER 4c: Safety Library (Principles)
+│   ├── knowledge-python/              # LAYER 4a: Memory & Audit Library
+│   ├── stage-python/                  # LAYER 4b: Interface Library
+│   ├── conscience-python/             # LAYER 4c: Safety & IAM Library
 │   └── engine-python/                 # LAYER 5: The Runtime Kernel (Orchestrator)
 │
 ├── apps/                              # CONSUMERS
@@ -44,89 +45,84 @@ You must strictly adhere to this file structure. Do not create files outside the
 
 ## 3. The Methodology: Strict TDD
 
-We follow **Test-Driven Development (TDD)** religiously. You are not allowed to write logic without a failing test.
-
-Before starting a session of work, use `codebase_investigator` (in your tools) to analyze the project's architecture and purpose. Also, be sure to review CONTRIBUTING.md to ensure you follow the guidelines for contributing to this project. With this GEMINI.md, that CONTRIBUTING.md, the various README.md files, and the `codebase_investigator`, you should be able to gain a thorough understanding of the desired future state of the project before diving into editing code. THEN, proceed with the following TDD loop.
-
-**The TDD Loop:**
-
-1. **Red:** Write a test in `tests/` that defines the expected behavior of a component (e.g., `test_stack_push_frame`). Run it -> It fails.
-2. **Green:** Write the minimal implementation code to make the test pass.
-3. **Refactor:** Clean up the code while ensuring tests stay green.
+We follow **Test-Driven Development** religiously.
+**The Loop:** Red (Write Test) Green (Write Code) Refactor.
+**The Scope:** TDD applies to **System Behavior**, not just Unit Logic. We write the Integration Test Harness early to ensure components wire together correctly.
 
 ---
 
 ## 4. Implementation Roadmap
 
-Execute these phases in order. Do not jump ahead.
+Execute these phases in order.
 
 ### Phase 1: The Protocol (`packages/lang-python`)
 
 **Goal:** Define the data structures.
 
-1. Define Pydantic models for `FlowDefinition`, `StanzaDefinition`, `AgentDefinition` in `noetic_lang/core`.
-2. Implement `generate_schemas.py` to output JSON Schemas to `packages/spec`.
-3. **TDD:** Test that invalid JSON raises `ValidationError`.
+1. Define Pydantic models for `FlowDefinition`, `StanzaDefinition`, `AgentDefinition`.
+2. **New:** Define `IdentityContext` and `ACL` models (User Roles, Permissions).
+3. Implement `generate_schemas.py` to output JSON Schemas to `packages/spec`.
 
-### Phase 2: The Libraries (Independent Modules)
+### Phase 2: Libraries & The Test Harness
 
-#### A. Knowledge (`packages/knowledge-python`)
+**Goal:** Build the Components and the Exam they must pass.
 
-**Goal:** Build the Cognitive OS.
+1. **The System Harness (`packages/engine-python/tests/harness`)**
 
-1. **TDD:** `test_memory_stack.py`. Implement `MemoryStack` and `MemoryFrame`. Ensure popping a frame clears its data.
-2. **TDD:** `test_graph_store.py`. Implement wrappers for the Vector DB (Chroma/Lance).
-3. **TDD:** `test_nexus.py`. Implement the Relevance Formula () for context assembly.
+- **TDD Priority 1:** Create `mock_flow_runner.py`. This is a skeleton that _attempts_ to run a Flow Definition using mocked components. It should fail immediately (Red).
+- _Why:_ This defines the "API Surface" the Engine must eventually satisfy.
 
-#### B. Stage (`packages/stage-python`)
+1. **Knowledge (`packages/knowledge-python`)**
 
-**Goal:** Define the UI Protocol.
+- **TDD:** `test_memory_stack.py`. Implement `MemoryStack` with serialization support (for stateless concurrency).
+- **TDD:** `test_audit_log.py`. Implement the **Unified Audit Stream** with **Semantic Compression** (folding repetitive logs).
+- **TDD:** `test_sync.py`. Implement "Dynamic Sourcing" (Peer/Cloud sync).
 
-1. Define the `Intent` and `RenderEvent` data classes.
-2. **TDD:** `test_renderer.py`. Ensure intents convert to valid JSON UI cards.
+1. **Conscience (`packages/conscience-python`)**
 
-#### C. Conscience (`packages/conscience-python`)
+- **TDD:** `test_acl.py`. Implement "Fine-toothed comb" IAM checks (Identity vs ResourceACL).
+- **TDD:** `test_principles.py`. Implement Cost/Risk evaluation.
 
-**Goal:** Build the Safety Engine.
+1. **Stage (`packages/stage-python`)**
 
-1. **TDD:** `test_cost_calc.py`. Implement `Principles` logic (JsonLogic). Ensure high-risk actions trigger vetoes.
+- Define `Intent` and `RenderEvent`.
 
-### Phase 3: The Engine (`packages/engine-python`)
+### Phase 3: The Engine & System Integration (`packages/engine-python`)
 
-**Goal:** Wire the Brain.
+**Goal:** Build the Brain to pass the Harness.
 
-1. **Cognition:**
+1. **Cognition (The Mind):**
 
-- **TDD:** `test_planner.py`. Implement the Actor (Planner) that reads a Stanza and outputs Steps.
-- **TDD:** `test_evaluator.py`. Implement the Critic that scores plans.
+- **TDD:** `test_model_gateway.py`. Implement **Dynamic Inference Routing** (Local Peer Cloud failover).
+- **TDD:** `test_planner.py` & `test_evaluator.py`.
 
-1. **Runtime:**
+1. **Runtime (The Kernel):**
 
-- **TDD:** `test_interpreter.py` (formerly Stanza Executor). Test entering/exiting Stanzas and pushing Stack frames.
-- **TDD:** `test_flow_executor.py`. wrapper for LangGraph to navigate the Flow graph.
+- **TDD:** `test_secrets.py`. Implement `SecretsManager` (Vault injection).
+- **TDD:** `test_interpreter.py`. Implement the `StanzaExecutor`.
+- **Integration:** Run the **System Harness** created in Phase 2. It should now turn Green.
 
-### Phase 4: The Application (`apps/python-cli`)
+### Phase 4: Reference Application (`apps/python-cli`)
 
-**Goal:** Run it.
+**Goal:** The Final Consumer.
 
-1. Create `main.py` that imports `noetic_engine`.
+1. Create `main.py` that imports the now-tested `noetic_engine`.
 2. Load `packages/stdlib/stanzas/research.noetic`.
-3. Execute the loop.
+3. Verify end-to-end user experience.
 
 ---
 
 ## 5. Coding Standards
 
-- **Models:** Use Pydantic V2 for all data structures.
-- **Async:** All I/O (LLM calls, DB reads) must be `async/await`.
-- **Typing:** Strict Python type hints (`List`, `Optional`, `Dict`).
-- **Docstrings:** Google Style docstrings for all classes and public methods.
-- **Imports:** Use absolute imports relative to the package root (e.g., `from noetic_knowledge.stack import MemoryStack`).
+- **Models:** Use Pydantic V2.
+- **Async:** All I/O must be `async/await`.
+- **Typing:** Strict Python type hints.
+- **Security:** Never log secrets. Always validate inputs.
+- **Imports:** Use absolute imports relative to the package root.
 
 ## 6. Key Conceptual Shifts (Reminders)
 
-- **"Orchestration" is dead.** We use **Cognition** (Logic) and **Stanzas** (Structure).
-- **Flow Executors are Runtime.** Do not put execution logic in `stanzas/`. Put it in `runtime/executors/`.
-- **Agents are not monolithic.** They are bindings of a _Persona_, _Principles_, and _Knowledge_. They operate _within_ a Stanza.
-
-**When in doubt, check the architecture tree. If a file is in the wrong place, move it.**
+- **Audit is Holistic:** We trace the _Machine_ (Latency/Errors) and the _Mind_ (Decisions/Thoughts) in the same stream.
+- **Semantic Compression:** Don't drown the logs. Summarize the noise; highlight the signal.
+- **IAM Principles:** "Can I?" (IAM) is different from "Should I?" (Principles). Both must pass.
+- **Resiliency:** The system assumes the Cloud is down. Always have a Local/Peer fallback strategy for inference and knowledge.

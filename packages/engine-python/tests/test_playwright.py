@@ -9,7 +9,7 @@ from noetic_engine.runtime.engine import NoeticEngine
 import sys
 # Adjust path to import main from apps/python-cli
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../apps/python-cli")))
-from main import create_app
+from noetic_engine.server import create_app
 
 def run_test_server(port, codex_path):
     print(f"DEBUG: Starting test server on port {port}")

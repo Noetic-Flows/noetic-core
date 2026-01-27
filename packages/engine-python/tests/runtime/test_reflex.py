@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from noetic_engine.runtime.reflex import ReflexSystem
-from noetic_engine.canvas import Component, Text, Binding
-from noetic_engine.knowledge import WorldState
+from noetic_stage.schema import Component, Text, Binding
+from noetic_knowledge import WorldState
 
 @pytest.fixture
 def mock_world_state():
@@ -33,10 +33,10 @@ def test_reflex_tick_renders_root(mock_world_state):
     reflex.set_root(root)
     
     # Mock renderer to avoid FastUI dependency issues in test logic
-    with patch("noetic_engine.canvas.renderer.c") as mock_fastui:
+    with patch("noetic_stage.renderer.c") as mock_fastui:
         # If fastui is missing, c is None. We force it to be a mock.
         # But we need to patch the instance of CanvasRenderer or the module where it's used.
-        # The imports in reflex.py is `from noetic_engine.canvas import ...`
+        # The imports in reflex.py is `from noetic_stage.renderer import ...`
         
         # Let's patch the renderer.render method directly since we just want to know if it was called.
         reflex.renderer.render = MagicMock(return_value="RENDERED_UI")
@@ -55,7 +55,7 @@ def test_reflex_tick_renders_root(mock_world_state):
 def test_resolve_pointer_integration():
     # Test that actual renderer _resolve works if we can.
     # We need to construct a CanvasRenderer and call _resolve.
-    from noetic_engine.canvas.renderer import CanvasRenderer
+    from noetic_stage.renderer import CanvasRenderer
     
     renderer = CanvasRenderer()
     context = {"user": {"name": "Bob"}}

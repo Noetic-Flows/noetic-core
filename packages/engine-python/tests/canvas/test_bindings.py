@@ -1,6 +1,7 @@
 import pytest
-from noetic_engine.canvas import CanvasRenderer, Text, Binding, Column, ForEach
-from noetic_engine.knowledge.schema import WorldState
+from noetic_stage.renderer import CanvasRenderer
+from noetic_stage.schema import Text, Binding, Column, ForEach
+from noetic_knowledge.store.schema import WorldState
 
 @pytest.fixture
 def renderer():

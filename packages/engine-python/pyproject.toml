@@ -17,10 +17,10 @@ dependencies = [
     "networkx",
     "langgraph",
     "json-logic-qubit",
-    "noetic-lang @ file://../lang-python",
-    "noetic-knowledge @ file://../knowledge-python",
-    "noetic-stage @ file://../stage-python",
-    "noetic-conscience @ file://../conscience-python"
+    "noetic-lang",
+    "noetic-knowledge",
+    "noetic-stage",
+    "noetic-conscience"
 ]
 
 [tool.setuptools.packages.find]

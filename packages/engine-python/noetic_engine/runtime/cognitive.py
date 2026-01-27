@@ -1,9 +1,13 @@
 import asyncio
 import logging
-from noetic_engine.knowledge import KnowledgeStore, WorldState
+from noetic_knowledge import KnowledgeStore, WorldState
+from noetic_lang.core import Goal, PlanStep, AgentDefinition as AgentContext
 from noetic_engine.skills import SkillRegistry, SkillContext
-from noetic_engine.orchestration import Planner, AgentContext, Goal, PlanStep, AgentManager
-from noetic_engine.orchestration.evaluator import Evaluator as RedTeamEvaluator
+from noetic_engine.cognition.planner import Planner
+from noetic_engine.cognition.manager import AgentManager
+from noetic_engine.cognition.evaluator import Evaluator as RedTeamEvaluator
+
+from noetic_engine.cognition.flow_manager import FlowManager
 
 logger = logging.getLogger(__name__)
 
@@ -12,12 +16,13 @@ class CognitiveSystem:
     Manages the 'Cognitive Loop' (System 2) - Planning and Decision Making.
     Running asynchronously from the UI loop.
     """
-    def __init__(self, knowledge: KnowledgeStore, skills: SkillRegistry, planner: Planner, agent_manager: AgentManager, red_teamer: RedTeamEvaluator = None):
+    def __init__(self, knowledge: KnowledgeStore, skills: SkillRegistry, planner: Planner, agent_manager: AgentManager, red_teamer: RedTeamEvaluator = None, flow_manager: FlowManager = None):
         self.knowledge = knowledge
         self.skills = skills
         self.planner = planner
         self.agent_manager = agent_manager
         self.red_teamer = red_teamer
+        self.flow_manager = flow_manager
         self.active_tasks = set()
 
     async def process_next(self, state: WorldState):
@@ -32,6 +37,21 @@ class CognitiveSystem:
             event = state.event_queue[0] 
             logger.info(f"Cognitive System processing event: {event.type}")
             
+            # --- Flow Execution Trigger ---
+            if event.type == "cmd.run_flow":
+                flow_id = event.payload.get("flow_id")
+                if flow_id and self.flow_manager:
+                    executor = self.flow_manager.get_executor(flow_id)
+                    if executor:
+                        logger.info(f"Triggering Flow: {flow_id}")
+                        # Provide skill context for flow nodes to use
+                        event.payload["_skill_context"] = SkillContext(
+                            agent_id="system.flow", # Or derived from event
+                            store=self.knowledge
+                        )
+                        await executor.step(event.payload, state)
+                        return
+            
             agent_ids = list(self.agent_manager.agents.keys())
             if not agent_ids:
                 logger.warning("No agents registered to handle event.")
@@ -42,6 +62,11 @@ class CognitiveSystem:
             # Simple heuristic: if we have a test-event, we want to 'wait'
             target = {"done": True} if event.type == "test-event" else {}
             goal = Goal(description=f"Handle event {event.type}", target_state=target)
+            
+            # Log Goal to Knowledge
+            import uuid
+            agent_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, agent.id)
+            self.knowledge.ingest_fact(agent_uuid, "current_goal", object_literal=goal.description)
             
             plan = await self.planner.generate_plan(agent, goal, state)
             
@@ -101,17 +126,18 @@ class CognitiveSystem:
             # We use string IDs for the graph
             import uuid
             try:
-                # We need to find or create entities for Agent and Skill to link them?
-                # For now, just ingest fact with literal/UUID
-                # We'll use the agent_id as subject
                 agent_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, agent.id)
+                log_id = uuid.uuid4().hex[:8]
                 
                 # Metadata as JSON literal? Our current FactModel only has object_literal as string.
                 # Let's just record the usage.
+                action_desc = step.rationale or step.instruction or step.skill_id
+                
                 self.knowledge.ingest_fact(
                     subject_id=agent_uuid,
                     predicate="used_skill",
-                    object_literal=f"{step.skill_id} (cost={result.cost}, duration={duration_ms}ms)"
+                    object_literal=f"[{log_id}] {action_desc}",
+                    allow_multiple=True
                 )
             except Exception as e:
                 logger.error(f"Failed to log skill usage fact: {e}")

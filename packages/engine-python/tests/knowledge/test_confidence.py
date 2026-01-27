@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime, timedelta
 from uuid import uuid4
-from noetic_engine.knowledge.schema import Fact
+from noetic_knowledge.store.schema import Fact
 
 def test_fact_decay():
     now = datetime.utcnow()

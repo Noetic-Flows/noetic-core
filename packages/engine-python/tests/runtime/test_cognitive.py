@@ -3,11 +3,12 @@ import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 from noetic_engine.runtime.cognitive import CognitiveSystem
-from noetic_engine.knowledge import KnowledgeStore, WorldState
-from noetic_engine.orchestration import Planner, AgentManager, AgentContext
+from noetic_knowledge import KnowledgeStore, WorldState
+from noetic_engine.cognition import Planner, AgentManager
+from noetic_lang.core import AgentDefinition as AgentContext
 from noetic_engine.skills import SkillRegistry, Skill
-from noetic_engine.knowledge.schema import Fact, Event
-from noetic_engine.conscience import Evaluator
+from noetic_knowledge.store.schema import Fact, Event
+from noetic_conscience import Evaluator
 
 class MockSkill(Skill):
     id = "skill.system.wait"
@@ -21,7 +22,7 @@ class MockSkill(Skill):
 @pytest.mark.asyncio
 async def test_process_next_executes_plan():
     # Setup
-    knowledge = KnowledgeStore()
+    knowledge = KnowledgeStore(db_url="sqlite:///:memory:")
     skills = MagicMock(spec=SkillRegistry)
     evaluator = Evaluator()
     planner = Planner(skills, evaluator)

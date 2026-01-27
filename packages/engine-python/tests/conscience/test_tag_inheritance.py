@@ -1,7 +1,7 @@
 import pytest
 from uuid import uuid4
-from noetic_engine.conscience import Evaluator, Principle, JudgementContext
-from noetic_engine.knowledge import KnowledgeStore
+from noetic_conscience import Evaluator, Principle, JudgementContext
+from noetic_knowledge import KnowledgeStore
 
 @pytest.fixture
 def store():

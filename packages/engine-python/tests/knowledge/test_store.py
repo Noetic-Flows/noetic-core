@@ -1,8 +1,8 @@
 import pytest
 from uuid import uuid4
 from datetime import datetime
-from noetic_engine.knowledge.store import KnowledgeStore
-from noetic_engine.knowledge.schema import Entity
+from noetic_knowledge.store.store import KnowledgeStore
+from noetic_knowledge.store.schema import Entity
 
 import uuid
 

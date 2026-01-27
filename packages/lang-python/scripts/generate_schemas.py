@@ -7,7 +7,7 @@ import sys
 # Package is in packages/lang-python/
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from noetic_lang.core import StanzaDefinition, FlowDefinition, AgentDefinition
+from noetic_lang.core import StanzaDefinition, FlowDefinition, AgentDefinition, IdentityContext, ACL
 
 # Output to packages/spec/schemas/
 # ../../spec/schemas
@@ -26,3 +26,5 @@ if __name__ == "__main__":
     write_schema(StanzaDefinition, "stanza.schema.json")
     write_schema(FlowDefinition, "flow.schema.json")
     write_schema(AgentDefinition, "agent.schema.json")
+    write_schema(IdentityContext, "identity.schema.json")
+    write_schema(ACL, "acl.schema.json")

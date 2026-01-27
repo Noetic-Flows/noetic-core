@@ -1,6 +1,7 @@
 import pytest
 from noetic_engine.skills import SkillRegistry, Skill, SkillContext
-from noetic_engine.orchestration import AgentManager, AgentContext
+from noetic_engine.cognition import AgentManager
+from noetic_lang.core import AgentDefinition as AgentContext
 
 class SecretSkill(Skill):
     id = "skill.secret.launch_nukes"

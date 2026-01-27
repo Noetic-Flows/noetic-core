@@ -6,6 +6,11 @@ from sqlalchemy.orm import sessionmaker, Session
 import chromadb
 from chromadb.config import Settings
 import networkx as nx
+from typing import Protocol
+
+class KnowledgeSource(Protocol):
+    async def fetch(self, query: str) -> List[Dict[str, Any]]:
+        ...
 
 # Import Models (DB Layer)
 from .models import Base, EntityModel, FactModel, TagModel
@@ -41,36 +46,80 @@ class KnowledgeStore:
         self._load_graph_cache()
         
         self.summarizer = None # Callable[[List[str]], Awaitable[str]]
+        self.sources: Dict[str, KnowledgeSource] = {}
+
+    def add_source(self, name: str, source: KnowledgeSource):
+        self.sources[name] = source
+
+    async def source_knowledge(self, query: str):
+        """
+        Queries external sources and ingests results.
+        """
+        for name, source in self.sources.items():
+            try:
+                results = await source.fetch(query)
+                for res in results:
+                    # Expect res to be dict with content, maybe ID
+                    # We need to map this to Facts.
+                    # Simple Assumption: Subject=Query (as concept), Predicate="found_in", Object=Content
+                    # Or better: The source returns structured triples?
+                    # For now, treat as unstructured text ingestion.
+                    
+                    # Create a concept for the query
+                    concept_id = uuid4() # or hash(query)
+                    
+                    self.ingest_fact(
+                        subject_id=concept_id,
+                        predicate="related_content",
+                        object_literal=res.get("content", str(res)),
+                        subject_type="Concept",
+                        source_type=f"external:{name}"
+                    )
+                    self.ingest_fact(concept_id, "name", object_literal=query)
+            except Exception as e:
+                import logging
+                logging.getLogger("noetic.knowledge").warning(f"Source {name} failed: {e}")
 
     def _get_session(self) -> Session:
         return self.SessionLocal()
 
     async def _fold_episodes(self):
         """
-        Consolidates granular 'episodic_log' facts into 'episodic_summary' facts.
+        Consolidates granular facts (logs) into summary facts.
         """
         if not self.summarizer:
             return
 
         session = self._get_session()
         try:
-            # 1. Find active 'episodic_log' facts
+            # 1. Find active log facts
+            # We fold 'episodic_log' -> 'episodic_summary'
+            # and 'audit.trace' -> 'audit.summary'
+            
+            fold_targets = {
+                "episodic_log": "episodic_summary",
+                "audit.trace": "audit.summary"
+            }
+            
             stmt = select(FactModel).where(
-                FactModel.predicate == "episodic_log",
+                FactModel.predicate.in_(fold_targets.keys()),
                 FactModel.valid_until.is_(None)
             )
             logs = session.execute(stmt).scalars().all()
             
-            # 2. Group by subject
+            # 2. Group by subject AND predicate
             from collections import defaultdict
             grouped = defaultdict(list)
             for log in logs:
-                grouped[log.subject_id].append(log)
+                key = (log.subject_id, log.predicate)
+                grouped[key].append(log)
             
             # 3. Process groups
             timestamp = datetime.utcnow()
-            for subject_id, subject_logs in grouped.items():
-                if len(subject_logs) >= 3: # Consolidation Threshold
+            for (subject_id, predicate), subject_logs in grouped.items():
+                target_predicate = fold_targets[predicate]
+                
+                if len(subject_logs) >= 3: # Consolidation Threshold (low for testing)
                     # Generate Summary
                     text_logs = [l.object_literal for l in subject_logs]
                     summary = await self.summarizer(text_logs)
@@ -79,12 +128,11 @@ class KnowledgeStore:
                     for log in subject_logs:
                         log.valid_until = timestamp
                         session.add(log)
-                        # TODO: Remove from Graph/Chroma if strict consistency needed
                     
                     # Create Summary Fact
                     new_fact = FactModel(
                         subject_id=subject_id,
-                        predicate="episodic_summary",
+                        predicate=target_predicate,
                         object_literal=summary,
                         valid_from=timestamp
                     )
@@ -152,7 +200,7 @@ class KnowledgeStore:
                 weight=1.0
             )
 
-    def ingest_fact(self, subject_id: UUID, predicate: str, object_entity_id: Optional[UUID] = None, object_literal: Optional[str] = None, subject_type: str = "unknown", confidence: float = 1.0, source_type: str = "inference") -> Fact:
+    def ingest_fact(self, subject_id: UUID, predicate: str, object_entity_id: Optional[UUID] = None, object_literal: Optional[str] = None, subject_type: str = "unknown", confidence: float = 1.0, source_type: str = "inference", allow_multiple: bool = False) -> Fact:
         """
         Ingests a fact into the knowledge graph.
         Handles temporal validity and contradictions.
@@ -189,27 +237,28 @@ class KnowledgeStore:
                 # For now, just return existing
                 return self._map_fact_model_to_schema(existing_exact_fact)
 
-            # 3. Check for Contradictions
-            contradiction_stmt = select(FactModel).where(
-                FactModel.subject_id == subject_id,
-                FactModel.predicate == predicate,
-                FactModel.valid_until.is_(None)
-            )
-            
-            existing_contradictions = session.execute(contradiction_stmt).scalars().all()
-            
-            for old_fact in existing_contradictions:
-                old_fact.valid_until = now
-                session.add(old_fact)
-                # Remove from Graph Cache
-                try:
-                    u = str(old_fact.subject_id)
-                    v = str(old_fact.object_entity_id) if old_fact.object_entity_id else f"literal:{old_fact.object_literal}"
-                    key = str(old_fact.id)
-                    if self.graph.has_edge(u, v, key=key):
-                        self.graph.remove_edge(u, v, key=key)
-                except Exception:
-                    pass # safe ignore if graph out of sync
+            # 3. Check for Contradictions (Only if not allowing multiple)
+            if not allow_multiple:
+                contradiction_stmt = select(FactModel).where(
+                    FactModel.subject_id == subject_id,
+                    FactModel.predicate == predicate,
+                    FactModel.valid_until.is_(None)
+                )
+                
+                existing_contradictions = session.execute(contradiction_stmt).scalars().all()
+                
+                for old_fact in existing_contradictions:
+                    old_fact.valid_until = now
+                    session.add(old_fact)
+                    # Remove from Graph Cache
+                    try:
+                        u = str(old_fact.subject_id)
+                        v = str(old_fact.object_entity_id) if old_fact.object_entity_id else f"literal:{old_fact.object_literal}"
+                        key = str(old_fact.id)
+                        if self.graph.has_edge(u, v, key=key):
+                            self.graph.remove_edge(u, v, key=key)
+                    except Exception:
+                        pass # safe ignore if graph out of sync
                 
             # 4. Insert New Fact
             new_fact = FactModel(

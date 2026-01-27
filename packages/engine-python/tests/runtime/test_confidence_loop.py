@@ -1,11 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from noetic_engine.runtime.cognitive import CognitiveSystem
-from noetic_engine.orchestration.evaluator import Evaluator as RedTeamEvaluator, EvaluationResult
-from noetic_engine.orchestration.schema import Plan, PlanStep, Goal
-from noetic_engine.knowledge import WorldState
-from noetic_engine.knowledge.schema import Event
+from noetic_engine.cognition.evaluator import Evaluator as RedTeamEvaluator, EvaluationResult
+from noetic_lang.core import Plan, PlanStep, Goal
+from noetic_knowledge import WorldState
+from noetic_knowledge.store.schema import Event
 from uuid import uuid4
+from datetime import datetime
 
 @pytest.fixture
 def mock_planner():
@@ -43,12 +44,8 @@ async def test_high_risk_plan_triggers_evaluator(cognitive_system, mock_red_team
         tick=1, 
         entities={}, 
         facts=[], 
-        event_queue=[Event(id=uuid4(), type="test", timestamp=uuid4().time if hasattr(uuid4(), 'time') else 0)] 
-        # timestamp needs datetime, but Mock handles it loosely or we fix
+        event_queue=[Event(id=uuid4(), type="test", timestamp=datetime.utcnow())] 
     )
-    # Fix event timestamp
-    from datetime import datetime
-    state.event_queue[0].timestamp = datetime.utcnow()
     
     await cognitive_system.process_next(state)
     

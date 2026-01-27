@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from noetic_engine.orchestration.evaluator import Evaluator, EvaluationResult, LLMClient
-from noetic_engine.orchestration.schema import Plan, PlanStep
+from noetic_engine.cognition.evaluator import Evaluator, EvaluationResult, LLMClient
+from noetic_lang.core import Plan, PlanStep
 
 @pytest.fixture
 def mock_llm():

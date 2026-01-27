@@ -1,12 +1,12 @@
 import asyncio
 import time
 from typing import Optional
-from noetic_engine.knowledge import KnowledgeStore
+from noetic_knowledge import KnowledgeStore
 from noetic_engine.skills import SkillRegistry
 from noetic_engine.skills.library.system.control import WaitSkill, LogSkill
 from noetic_engine.skills.library.memory import MemorizeSkill, RecallSkill
-from noetic_engine.orchestration import Planner, AgentManager, FlowManager
-from noetic_engine.conscience import Evaluator
+from noetic_engine.cognition import Planner, AgentManager, FlowManager
+from noetic_conscience import Evaluator
 from .reflex import ReflexSystem
 from .cognitive import CognitiveSystem
 from .scheduler import Scheduler
@@ -20,7 +20,7 @@ class NoeticEngine:
         self.knowledge = KnowledgeStore(db_url=db_url)
         self.skills = SkillRegistry()
         self.agent_manager = AgentManager()
-        self.flow_manager = FlowManager()
+        self.flow_manager = FlowManager(skill_registry=self.skills)
         self.evaluator = Evaluator()
         
         # Planner requires skills and principles
@@ -40,7 +40,8 @@ class NoeticEngine:
             self.knowledge, 
             self.skills, 
             self.planner, 
-            self.agent_manager
+            self.agent_manager,
+            flow_manager=self.flow_manager
         )
         self.scheduler = Scheduler(target_fps=60)
         self.lifecycle = LifecycleManager(self)

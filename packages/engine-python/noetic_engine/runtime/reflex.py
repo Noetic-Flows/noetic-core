@@ -1,6 +1,8 @@
 from typing import List, Any, Dict, Optional
-from noetic_engine.canvas import CanvasRenderer, ReflexManager, Component
-from noetic_engine.knowledge import WorldState
+from noetic_stage.renderer import CanvasRenderer
+from noetic_stage.reflex import ReflexManager
+from noetic_stage.schema import Component
+from noetic_knowledge import WorldState
 
 class ReflexSystem:
     """

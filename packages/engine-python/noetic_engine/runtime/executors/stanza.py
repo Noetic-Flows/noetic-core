@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, Any, Dict
 from noetic_lang.core import StanzaDefinition
-from noetic_engine.knowledge import WorldState
+from noetic_knowledge import WorldState
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ class StanzaExecutor:
         """
         Enters the Stanza, sets up the frame, and runs the body.
         """
-        logger.info(f"Entering stanza: {self.definition.name}")
+        logger.info(f"Entering stanza: {self.definition.id}")
         
         # 1. Setup MemoryFrame
         # Attempt to access the stack from WorldState
@@ -27,7 +27,7 @@ class StanzaExecutor:
              stack = getattr(state.working_memory, "stack", stack)
 
         if stack and hasattr(stack, "push_frame"):
-            stack.push_frame(goal=self.definition.name, context=context)
+            stack.push_frame(goal=self.definition.description, context=context)
         else:
             logger.debug("No compatible memory stack found in WorldState.")
             
@@ -37,14 +37,14 @@ class StanzaExecutor:
             
             # If definition has steps (procedural)
             if hasattr(self.definition, 'steps') and self.definition.steps:
-                logger.info(f"Executing procedural stanza: {self.definition.name}")
+                logger.info(f"Executing procedural stanza: {self.definition.id}")
                 # TODO: Implement Step Runner invocation
                 for step in self.definition.steps:
                     # Placeholder for step execution
-                    logger.debug(f" - Step: {step}")
+                    logger.debug(f" - Step: {step.instruction}")
             else:
                 # Agentic / Planner
-                logger.info(f"Executing agentic stanza: {self.definition.name}")
+                logger.info(f"Executing agentic stanza: {self.definition.id}")
                 # TODO: Implement Planner handoff
                 pass
                 

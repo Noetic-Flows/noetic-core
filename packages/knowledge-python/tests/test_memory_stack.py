@@ -1,40 +1,24 @@
 import pytest
 from noetic_knowledge.working.stack import MemoryStack, MemoryFrame
 
-def test_stack_lifecycle():
+def test_stack_serialization():
     stack = MemoryStack()
-    assert stack.current_frame is None
-
-    # Push Frame 1
-    frame1 = stack.push_frame(goal="Root Goal", context={"user": "alice"})
-    assert stack.current_frame == frame1
-    assert stack.current_frame.goal == "Root Goal"
-    assert stack.current_frame.context["user"] == "alice"
-
-    # Log to Frame 1
-    stack.add_log("Started process")
-    assert len(stack.current_frame.logs) == 1
-    assert stack.current_frame.logs[0].content == "Started process"
-
-    # Push Frame 2
-    frame2 = stack.push_frame(goal="Sub Goal")
-    assert stack.current_frame == frame2
-    assert stack.current_frame != frame1
-
-    # Log to Frame 2
-    stack.add_log("Working on subtask")
-    assert len(stack.current_frame.logs) == 1
-    assert len(frame1.logs) == 1 # Frame 1 unchanged
-
-    # Pop Frame 2
-    stack.pop_frame()
-    assert stack.current_frame == frame1
+    stack.push_frame("Goal 1", {"k": "v"})
+    stack.add_log("Log 1")
     
-    # Pop Frame 1
-    stack.pop_frame()
-    assert stack.current_frame is None
+    # Serialize
+    data = stack.model_dump()
+    assert isinstance(data, dict)
+    assert len(data["frames"]) == 1
+    assert data["frames"][0]["goal"] == "Goal 1"
+    
+    # Deserialize
+    new_stack = MemoryStack.model_validate(data)
+    assert len(new_stack.frames) == 1
+    assert new_stack.current_frame.goal == "Goal 1"
+    assert new_stack.current_frame.logs[0].content == "Log 1"
 
-def test_empty_stack_pop():
+def test_stack_empty_pop():
     stack = MemoryStack()
-    result = stack.pop_frame()
-    assert result is None
+    res = stack.pop_frame()
+    assert res is None

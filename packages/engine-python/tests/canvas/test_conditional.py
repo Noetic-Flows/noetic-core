@@ -1,6 +1,6 @@
 import pytest
-from noetic_engine.canvas import CanvasRenderer, Text, Binding, Conditional
-from noetic_engine.canvas.schema import Conditional
+from noetic_stage.renderer import CanvasRenderer
+from noetic_stage.schema import Text, Binding, Conditional
 
 @pytest.fixture
 def renderer():

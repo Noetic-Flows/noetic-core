@@ -1,7 +1,7 @@
 import pytest
 import os
 import json
-from noetic_engine.runtime import NoeticEngine
+from noetic_engine.runtime.engine import NoeticEngine
 from noetic_engine.loader import NoeticLoader, CodexIntegrityError
 
 def test_loader_integrity_missing_skill(tmp_path):

@@ -8,6 +8,7 @@ class Action(BaseModel):
 class PlanStep(Action):
     cost: float = 0.0
     rationale: Optional[str] = None
+    instruction: Optional[str] = None
 
 class Plan(BaseModel):
     steps: List[PlanStep]
