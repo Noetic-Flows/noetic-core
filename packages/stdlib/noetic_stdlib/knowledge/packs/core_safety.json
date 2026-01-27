@@ -1,0 +1,10 @@
+{
+    "id": "core_safety_pack",
+    "facts": [
+        {
+            "subject": "agent",
+            "predicate": "must_not_harm",
+            "object": "human"
+        }
+    ]
+}

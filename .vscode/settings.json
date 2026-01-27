@@ -4,5 +4,6 @@
     },
     "search.exclude": {
         "**/*.noetic": false
-    }
+    },
+    "CodeGPT.apiKey": "Ollama"
 }

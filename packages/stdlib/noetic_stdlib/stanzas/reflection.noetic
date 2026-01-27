@@ -1,0 +1,15 @@
+{
+    "id": "reflection_phase",
+    "description": "Reviews the previous output for errors.",
+    "steps": [
+        {
+            "id": "critique",
+            "instruction": "Analyze the output for logical errors."
+        },
+        {
+            "id": "improve",
+            "instruction": "Suggest improvements."
+        }
+    ],
+    "context_keys": ["output"]
+}
