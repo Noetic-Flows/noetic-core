@@ -90,14 +90,25 @@ def create_app(engine: NoeticEngine, codex_path: str):
     # Agent Server Protocol (ASP)
     # -----------------------------
     from fastapi import WebSocket, WebSocketDisconnect
+    from fastapi.middleware.cors import CORSMiddleware
+
+    # Allow CORS for Web Hub (Local Development)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"], # TODO: Lock this down for production
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     
     @app.websocket("/ws/asp")
     async def asp_endpoint(websocket: WebSocket):
         await websocket.accept()
-        logger.info("ASP Client Connected")
+        logger.info(f"ASP Client Connected from {websocket.client}")
         
         # Subscribe to Engine Updates
         queue = engine.subscribe()
+        logger.info("Subscribed to Engine updates")
         
         async def receive_loop():
             try:
@@ -105,6 +116,7 @@ def create_app(engine: NoeticEngine, codex_path: str):
                     # 1. Receive Message
                     message = await websocket.receive_json()
                     msg_type = message.get("type")
+                    logger.debug(f"Received from client: {msg_type}")
                     
                     if msg_type == "CONNECT":
                         await websocket.send_json({
@@ -112,6 +124,7 @@ def create_app(engine: NoeticEngine, codex_path: str):
                             "status": "CONNECTED", 
                             "server_time": 0
                         })
+                        logger.info("Sent CONNECT ACK")
                     
                     elif msg_type == "INTENT":
                         payload = message.get("payload", {})
@@ -123,21 +136,32 @@ def create_app(engine: NoeticEngine, codex_path: str):
                         })
                     else:
                         logger.warning(f"Unknown ASP message type: {msg_type}")
-            except RuntimeError:
-                logger.info("Client Disconnected (Receive Loop)")
+            except RuntimeError as e:
+                logger.error(f"RuntimeError in receive_loop: {e}")
             except WebSocketDisconnect:
                 logger.info("WebSocket Disconnected (Receive Loop)")
+            except Exception as e:
+                logger.error(f"Unexpected error in receive_loop: {e}")
                 
         async def send_loop():
             try:
                 while True:
                     # 2. Broadcast Updates
+                    # logger.debug("Waiting for info in queue...") 
                     msg = await queue.get()
-                    await websocket.send_json(msg)
-            except RuntimeError:
-                 logger.info("Client Disconnected (Send Loop)")
+                    # logger.debug(f"Got msg from queue: {type(msg)}")
+                    try:
+                        await websocket.send_json(msg)
+                        # logger.debug("Sent msg to websocket") 
+                    except Exception as e:
+                        logger.error(f"Failed to send JSON: {e} | Msg keys: {msg.keys() if isinstance(msg, dict) else 'NotDict'}")
+                        break
+            except RuntimeError as e:
+                 logger.error(f"RuntimeError in send_loop: {e}")
             except WebSocketDisconnect:
                  logger.info("WebSocket Disconnected (Send Loop)")
+            except Exception as e:
+                 logger.error(f"Unexpected error in send_loop: {e}")
 
         # Run both loops handling clean shutdown
         try:

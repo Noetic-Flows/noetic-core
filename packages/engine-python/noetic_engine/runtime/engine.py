@@ -39,7 +39,14 @@ class NoeticEngine:
         
         # 4. Initialize Reflex Loop
         self.reflex = ReflexSystem()
-        self.scheduler = Scheduler(target_fps=60)
+        
+        # [PRODUCTION] Set Default System Visage
+        from noetic_engine.visages.system import SystemDashboardVisage
+        
+        self.system_visage = SystemDashboardVisage(self)
+        self.reflex.set_visage(self.system_visage)
+
+        self.scheduler = Scheduler(target_fps=30)
         self.lifecycle = LifecycleManager(self)
         self.flow_manager = FlowManager()
 
@@ -117,6 +124,12 @@ class NoeticEngine:
         queue = asyncio.Queue()
         self.subscribers.append(queue)
         print(f"New subscriber registered. Total subscribers: {len(self.subscribers)}")
+        
+        # Send latest state immediately if available
+        if self.latest_ui:
+             msg = self._build_state_msg(self.latest_ui)
+             queue.put_nowait(msg)
+             
         return queue
 
     def unsubscribe(self, queue: asyncio.Queue):
@@ -124,22 +137,36 @@ class NoeticEngine:
             self.subscribers.remove(queue)
             print(f"Subscriber removed. Total subscribers: {len(self.subscribers)}")
 
+    def _build_state_msg(self, ui_state):
+        # Helper to serialize UI
+        # ui_state is list[AnyComponent]. Pydantic models need .model_dump()
+        # But for simplicity in this prototype, we'll let FastAPI/Starlette's json encoder handle it 
+        # OR we manually dump if they are Pydantic models.
+        # fastui components ARE pydantic models.
+        payload_ui = []
+        if isinstance(ui_state, list):
+            payload_ui = [c.model_dump(mode='json') for c in ui_state]
+        else:
+            payload_ui = [ui_state.model_dump(mode='json')]
+
+        return {
+            "type": "STATE_UPDATE",
+            "payload": {
+                "ui": payload_ui
+            }
+        }
+
     def _broadcast_state(self, ui_state):
         """
         Pushes the current UI state to all subscribers.
         """
-        # In a real impl, we'd diff or wrap this in a proper Message envelope
-        msg = {
-            "type": "STATE_UPDATE",
-            "payload": {
-                "ui": "UI_TREE_PLACEHOLDER" # serializing the full FastUI tree might be heavy, sending placeholder/summary for now unless needed
-                # In reality, we should serialize the Pydantic model
-            }
-        }
-        
-        # We also want to actually send the data, but `ui_state` is a list of FastUI components
-        # For the test pass, let's keep it simple.
-        
+        try:
+            msg = self._build_state_msg(ui_state)
+            print(f"[DEBUG] Generated State Update: {str(msg)[:200]}...") # Truncate for sanity
+        except Exception as e:
+            print(f"[ERROR] Failed to build state msg: {e}")
+            return
+
         # Cleanup closed loops
         for q in self.subscribers:
             if not q.full():
