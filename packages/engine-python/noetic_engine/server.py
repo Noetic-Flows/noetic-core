@@ -86,4 +86,71 @@ def create_app(engine: NoeticEngine, codex_path: str):
         """
         return HTMLResponse(prebuilt_html(title="Noetic Nexus OS"))
     
+    # -----------------------------
+    # Agent Server Protocol (ASP)
+    # -----------------------------
+    from fastapi import WebSocket, WebSocketDisconnect
+    
+    @app.websocket("/ws/asp")
+    async def asp_endpoint(websocket: WebSocket):
+        await websocket.accept()
+        logger.info("ASP Client Connected")
+        
+        # Subscribe to Engine Updates
+        queue = engine.subscribe()
+        
+        async def receive_loop():
+            try:
+                while True:
+                    # 1. Receive Message
+                    message = await websocket.receive_json()
+                    msg_type = message.get("type")
+                    
+                    if msg_type == "CONNECT":
+                        await websocket.send_json({
+                            "type": "ACK",
+                            "status": "CONNECTED", 
+                            "server_time": 0
+                        })
+                    
+                    elif msg_type == "INTENT":
+                        payload = message.get("payload", {})
+                        engine.push_event("user.intent", payload)
+                        await websocket.send_json({
+                            "type": "CONFIRMATION",
+                            "status": "RECEIVED",
+                            "ref_id": message.get("ref_id")
+                        })
+                    else:
+                        logger.warning(f"Unknown ASP message type: {msg_type}")
+            except RuntimeError:
+                logger.info("Client Disconnected (Receive Loop)")
+            except WebSocketDisconnect:
+                logger.info("WebSocket Disconnected (Receive Loop)")
+                
+        async def send_loop():
+            try:
+                while True:
+                    # 2. Broadcast Updates
+                    msg = await queue.get()
+                    await websocket.send_json(msg)
+            except RuntimeError:
+                 logger.info("Client Disconnected (Send Loop)")
+            except WebSocketDisconnect:
+                 logger.info("WebSocket Disconnected (Send Loop)")
+
+        # Run both loops handling clean shutdown
+        try:
+            receiver = asyncio.create_task(receive_loop())
+            sender = asyncio.create_task(send_loop())
+            done, pending = await asyncio.wait(
+                [receiver, sender], 
+                return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+        finally:
+            engine.unsubscribe(queue)
+            logger.info("ASP Client Session Ended")
+
     return app
