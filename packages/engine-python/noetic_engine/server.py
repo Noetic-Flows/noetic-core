@@ -154,3 +154,10 @@ def create_app(engine: NoeticEngine, codex_path: str):
             logger.info("ASP Client Session Ended")
 
     return app
+
+# -----------------------------
+# Module Access (for Uvicorn)
+# -----------------------------
+# We instantiate a default engine/app so `uvicorn noetic_engine.server:app` works.
+_engine = NoeticEngine()
+app = create_app(_engine, "./noetic.db")
